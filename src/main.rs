@@ -1,7 +1,8 @@
 use std::fs;
-use std::fs::File;
-use std::io::{BufReader, ErrorKind, Read};
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
 use clap::{Parser, Subcommand};
+use json::object;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -12,7 +13,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    New { tasks: Option<String> },
+    New { task: Option<String> },
     List
 }
 
@@ -29,7 +30,7 @@ impl TaskFile {
         }
     }
     fn get_file(&self) -> File {
-        match File::open(&self.file) {
+        match OpenOptions::new().read(true).append(true).open(&self.file) {
             Ok(f) => f,
             Err(e) => match e.kind() {
                 ErrorKind::NotFound => self.create_dir(),
@@ -50,10 +51,7 @@ impl TaskFile {
 
     fn create_tasks_file(&self) -> File {
         match File::create(&self.file) {
-            Ok(_) => match File::open(&self.file) {
-                Ok(f) => f,
-                Err(e) => panic!("Problem creating the file: {}", e)
-            },
+            Ok(_) => self.get_file(),
             Err(e) => panic!("Problem creating the file: {:?}", e)
         }
     }
@@ -67,18 +65,42 @@ fn main() {
         None => panic!("Failed to get path user home directory")
     };
 
-    let file = TaskFile::new(home.to_str().unwrap());
-    let mut buf = BufReader::new(file.get_file());
-    let mut string = String::new();
-    buf.read_to_string(&mut string).unwrap();
+    let task_file = TaskFile::new(home.to_str().unwrap());
+    let file = task_file.get_file();
 
     match cli.command {
-        Commands::New { tasks } => {
-            println!("'myapp add' was used, name is: {:?}", tasks)
+        Commands::New { task } => {
+            match task {
+                Some(task) => {
+                    let mut buf = BufWriter::new(file);
+                    buf
+                        .write_all((
+                            object! {
+                                success: false,
+                                description: task
+                            }.to_string() + "\n")
+                            .as_bytes()
+                        )
+                        .expect("Write failed!");
+                },
+                None => println!("Please enter a description of the task")
+            }
         },
         Commands::List => {
-            println!("siema")
+            let buf = BufReader::new(file);
+            for (i, json) in buf.lines().enumerate() {
+                match json {
+                    Ok(json) => {
+                        let j = json::parse(&*json).unwrap();
+                        println!("\
+                        Task: {}\n\
+                        Status: {}\n\
+                        Description: {}\n",
+                                 i+1, j["success"], j["description"]);
+                    },
+                    Err(e) => panic!("Problem reading the file {}", e)
+                }
+            }
         }
     };
-    println!("Hello, world!");
 }
