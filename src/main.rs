@@ -50,7 +50,10 @@ impl TaskFile {
 
     fn create_tasks_file(&self) -> File {
         match File::create(&self.file) {
-            Ok(f) => f,
+            Ok(_) => match File::open(&self.file) {
+                Ok(f) => f,
+                Err(e) => panic!("Problem creating the file: {}", e)
+            },
             Err(e) => panic!("Problem creating the file: {:?}", e)
         }
     }
@@ -58,13 +61,13 @@ impl TaskFile {
 
 fn main() {
     let cli = Cli::parse();
+
     let home = match dirs::home_dir() {
         Some(d) => d,
         None => panic!("Failed to get path user home directory")
     };
 
     let file = TaskFile::new(home.to_str().unwrap());
-
     let mut buf = BufReader::new(file.get_file());
     let mut string = String::new();
     buf.read_to_string(&mut string).unwrap();
