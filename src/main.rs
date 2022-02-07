@@ -1,6 +1,6 @@
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
+use std::io::{BufReader, BufWriter, ErrorKind, Read, Write};
 use clap::{Parser, Subcommand};
 use json::object;
 
@@ -18,19 +18,20 @@ enum Commands {
 }
 
 struct TaskFile {
-    folder: String,
-    file: String
+    folder_path: String,
+    file_path: String
 }
 
 impl TaskFile {
     fn new(path: &str) -> TaskFile {
         TaskFile {
-            folder: format!("{}/.tors", path),
-            file: format!("{}/.tors/tasks.json", path)
+            folder_path: format!("{}/.tors", path),
+            file_path: format!("{}/.tors/tasks.json", path),
         }
     }
+
     fn get_file(&self) -> File {
-        match OpenOptions::new().read(true).append(true).open(&self.file) {
+        match OpenOptions::new().read(true).append(true).create(true).open(&self.file_path) {
             Ok(f) => f,
             Err(e) => match e.kind() {
                 ErrorKind::NotFound => self.create_dir(),
@@ -40,67 +41,87 @@ impl TaskFile {
     }
 
     fn create_dir(&self) -> File {
-        match fs::create_dir_all(&self.folder) {
-            Ok(_) => self.create_tasks_file(),
+        match fs::create_dir_all(&self.folder_path) {
+            Ok(_) => self.get_file(),
             Err(e) => match e.kind() {
-                ErrorKind::AlreadyExists => self.create_tasks_file(),
+                ErrorKind::AlreadyExists => self.get_file(),
                 other => panic!("Problem creating the folder: {:?}", other)
             }
         }
     }
+}
 
-    fn create_tasks_file(&self) -> File {
-        match File::create(&self.file) {
-            Ok(_) => self.get_file(),
-            Err(e) => panic!("Problem creating the file: {:?}", e)
+struct App {
+    cli: Cli,
+    task: TaskFile
+}
+
+impl App {
+    fn new(cli: Cli, task: TaskFile) -> App {
+        App {
+            cli,
+            task
+        }
+    }
+
+    fn command(&self) {
+        match &self.cli.command {
+            Commands::New { task } => self.create_task(task),
+            Commands::List => self.list_tasks()
+        };
+    }
+
+    fn create_task(&self, task: &Option<String>) {
+        match task {
+            Some(t) => {
+                let mut buf = BufWriter::new(self.task.get_file());
+                buf
+                    .write_all((
+                        object! {
+                                    success: false,
+                                    description: t.to_owned()
+                                }.to_string() + "\n")
+                        .as_bytes()
+                    )
+                    .expect("Write failed!");
+                println!("Task added!");
+            },
+            None => println!("Please enter a description of the task")
+        }
+    }
+
+    fn list_tasks(&self) {
+        let mut buf = BufReader::new(self.task.get_file());
+        let mut string = String::new();
+        buf.read_to_string(&mut string).unwrap();
+
+        match string.len() == 0 {
+            true => println!("Not found tasks!"),
+            false => {
+                for (i, json) in string.lines().enumerate() {
+                    let j = json::parse(json).unwrap();
+                    println!("\
+                        Task: {}\n\
+                        Status: {}\n\
+                        Description: {}\n",
+                             i + 1,
+                             j["success"],
+                             j["description"]);
+                }
+            }
         }
     }
 }
 
 fn main() {
-    let cli = Cli::parse();
-
-    let home = match dirs::home_dir() {
+    let home_path = match dirs::home_dir() {
         Some(d) => d,
         None => panic!("Failed to get path user home directory")
     };
 
-    let task_file = TaskFile::new(home.to_str().unwrap());
-    let file = task_file.get_file();
+    let cli = Cli::parse();
+    let file = TaskFile::new(home_path.to_str().unwrap());
 
-    match cli.command {
-        Commands::New { task } => {
-            match task {
-                Some(task) => {
-                    let mut buf = BufWriter::new(file);
-                    buf
-                        .write_all((
-                            object! {
-                                success: false,
-                                description: task
-                            }.to_string() + "\n")
-                            .as_bytes()
-                        )
-                        .expect("Write failed!");
-                },
-                None => println!("Please enter a description of the task")
-            }
-        },
-        Commands::List => {
-            let buf = BufReader::new(file);
-            for (i, json) in buf.lines().enumerate() {
-                match json {
-                    Ok(json) => {
-                        let j = json::parse(&*json).unwrap();
-                        println!("\
-                        Task: {}\n\
-                        Status: {}\n\
-                        Description: {}\n",
-                                 i+1, j["success"], j["description"]);
-                    },
-                    Err(e) => panic!("Problem reading the file {}", e)
-                }
-            }
-        }
-    };
+    let app = App::new(cli, file);
+    app.command()
 }
