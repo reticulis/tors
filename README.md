@@ -5,3 +5,4 @@ Libs used in the project:
 * clap
 * json-rust
 * dirs
+* colored
