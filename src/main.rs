@@ -1,17 +1,16 @@
 use clap::{Parser, Subcommand};
-use json::object;
+use colored::*;
+use json::{object, JsonValue};
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, ErrorKind, Read, Write};
-use colored::*;
 
 const NOT_FOUND: &str = "Not found tasks!";
 const NOT_FOUND_T: &str = "Not found this task!";
 const ADDED: &str = "Task added!";
-const DESCRIPTION: &str = "Please enter a description of the task!";
 
 #[derive(Parser)]
-#[clap(version = "0.0.2-alpha")]
+#[clap(version = "0.0.3-alpha")]
 struct Cli {
     #[clap(subcommand)]
     command: Commands,
@@ -20,11 +19,13 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Add new task
-    New { task: Option<String> },
+    New { description: String },
     /// List tasks
-    List,
+    Ls,
     /// Delete task
-    Del { id: usize },
+    Rm { id: usize },
+    /// Select a completed task
+    Dn { id: usize },
 }
 
 struct TaskFile {
@@ -78,33 +79,48 @@ impl App {
 
     fn command(&self) {
         match &self.cli.command {
-            Commands::New { task } => self.create_task(task),
-            Commands::List => self.list_tasks(),
-            Commands::Del { id } => self.remove_task(id.clone()),
+            Commands::New { description: task } => self.create_task(task),
+            Commands::Ls => self.list_tasks(),
+            Commands::Rm { id } => self.remove_task(id.clone()),
+            Commands::Dn { id } => self.completed_task(id.clone()),
         };
     }
 
-    fn create_task(&self, task: &Option<String>) {
-        match task {
-            Some(t) => {
-                let mut buf = BufWriter::new(self.task.get_file());
-                buf.write_all(
-                    (object! {
-                        success: false,
-                        description: t.to_owned()
-                    }
-                    .to_string()
-                        + "\n")
-                        .as_bytes(),
-                )
-                .expect("Write failed!");
-                println!("{}", ADDED.green());
+    fn create_task(&self, task: &String) {
+        let mut buf = BufWriter::new(self.task.get_file());
+        buf.write_all(
+            (object! {
+                success: false,
+                description: task.to_owned()
             }
-            None => println!("{}", DESCRIPTION.red()),
-        }
+            .to_string()
+                + "\n")
+                .as_bytes(),
+        )
+        .expect("Write failed!");
+        println!("{}", ADDED.green());
     }
 
     fn list_tasks(&self) {
+        fn color(b: bool) -> [ColoredString; 3] {
+            match b {
+                true => ["Task".blue(), "Status".blue(), "Description".blue()],
+                false => ["Task".green(), "Status".green(), "Description".green()],
+            }
+        }
+
+        fn show(color: [ColoredString; 3], json: JsonValue, i: usize) {
+            println!(
+                "{}: {}\n{}: {}\n{}: {}\n",
+                color[0],
+                i + 1,
+                color[1],
+                json["success"],
+                color[2],
+                json["description"]
+            )
+        }
+
         let mut buf = BufReader::new(self.task.get_file());
         let mut string = String::new();
         buf.read_to_string(&mut string).unwrap();
@@ -114,45 +130,54 @@ impl App {
             false => {
                 for (i, json) in string.lines().enumerate() {
                     let j = json::parse(json).unwrap();
-                    println!(
-                        "\
-                        {}: {}\n\
-                        {}: {}\n\
-                        {}: {}\n",
-                        "Task".green(),
-                        i + 1,
-                        "Status".green(),
-                        j["success"],
-                        "Description".green(),
-                        j["description"]
-                    );
+                    match j["success"] == true {
+                        true => show(color(true), j, i),
+                        false => show(color(false), j, i),
+                    }
                 }
             }
         }
     }
     fn remove_task(&self, id: usize) {
+        match self.get_task(id) {
+            Ok(mut v) => match v.get(id - 1) {
+                Some(_) => {
+                    v.remove(id - 1);
+                    fs::write(&self.task.file_path, v.join("\n").as_bytes())
+                        .expect("Failed delete task")
+                }
+                None => println!("{}", NOT_FOUND_T.red()),
+            },
+            Err(e) => println!("{}", e.red()),
+        }
+    }
+    fn completed_task(&self, id: usize) {
+        match self.get_task(id) {
+            Ok(mut v) => match v.get(id - 1) {
+                Some(_) => {
+                    let mut j = json::parse(v[id - 1].as_str()).unwrap();
+                    j["success"] = true.into();
+                    v[id - 1] = j.to_string();
+                    fs::write(&self.task.file_path, v.join("\n").as_bytes())
+                        .expect("Failed delete task")
+                }
+                None => println!("{}", NOT_FOUND_T.red()),
+            },
+            Err(e) => println!("{}", e.red()),
+        }
+    }
+    fn get_task(&self, id: usize) -> Result<Vec<String>, &str> {
         match id == 0 {
-            true => {
-                println!("{}", NOT_FOUND_T.red());
-            }
-            false => {
+            true => Err(NOT_FOUND_T),
+            false => Ok({
                 let mut buf_reader = BufReader::new(self.task.get_file());
 
                 let mut old_file = String::new();
 
                 buf_reader.read_to_string(&mut old_file).unwrap();
 
-                let mut new_file = old_file.lines().collect::<Vec<&str>>();
-
-                match new_file.get(id - 1) {
-                    Some(_) => {
-                        new_file.remove(id - 1);
-                        fs::write(&self.task.file_path, new_file.join("\n").as_bytes())
-                            .expect("Failed delete task")
-                    }
-                    None => println!("{}", NOT_FOUND_T.red()),
-                }
-            }
+                old_file.lines().map(str::to_owned).collect::<Vec<String>>()
+            }),
         }
     }
 }
@@ -160,7 +185,7 @@ impl App {
 fn main() {
     let home_path = match dirs::home_dir() {
         Some(d) => d,
-        None => panic!("Failed to get path user home directory")
+        None => panic!("Failed to get path user home directory"),
     };
 
     let cli = Cli::parse();

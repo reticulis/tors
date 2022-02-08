@@ -6,3 +6,16 @@ Libs used in the project:
 * json-rust
 * dirs
 * colored
+
+### Build and install:
+```shell
+git clone https://github.com/reticulis/tors.git
+cd tors
+cargo build --release
+cargo install --path .
+```
+
+### Usage
+```shell
+tors help # for info usage
+```
