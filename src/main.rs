@@ -3,9 +3,15 @@ use json::object;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, ErrorKind, Read, Write};
+use colored::*;
+
+const NOT_FOUND: &str = "Not found tasks!";
+const NOT_FOUND_T: &str = "Not found this task!";
+const ADDED: &str = "Task added!";
+const DESCRIPTION: &str = "Please enter a description of the task!";
 
 #[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
+#[clap(version = "0.0.1-alpha")]
 struct Cli {
     #[clap(subcommand)]
     command: Commands,
@@ -13,8 +19,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Add new task
     New { task: Option<String> },
+    /// List tasks
     List,
+    /// Delete task
     Del { id: usize },
 }
 
@@ -89,9 +98,9 @@ impl App {
                         .as_bytes(),
                 )
                 .expect("Write failed!");
-                println!("Task added!");
+                println!("{}", ADDED.green());
             }
-            None => println!("Please enter a description of the task"),
+            None => println!("{}", DESCRIPTION.red()),
         }
     }
 
@@ -101,17 +110,20 @@ impl App {
         buf.read_to_string(&mut string).unwrap();
 
         match string.len() == 0 {
-            true => println!("Not found tasks!"),
+            true => println!("{}", NOT_FOUND.red()),
             false => {
                 for (i, json) in string.lines().enumerate() {
                     let j = json::parse(json).unwrap();
                     println!(
                         "\
-                        Task: {}\n\
-                        Status: {}\n\
-                        Description: {}\n",
+                        {}: {}\n\
+                        {}: {}\n\
+                        {}: {}\n",
+                        "Task".green(),
                         i + 1,
+                        "Status".green(),
                         j["success"],
+                        "Description".green(),
                         j["description"]
                     );
                 }
@@ -121,7 +133,7 @@ impl App {
     fn remove_task(&self, id: usize) {
         match id == 0 {
             true => {
-                println!("Not found this task");
+                println!("{}", NOT_FOUND_T.red());
             }
             false => {
                 let mut buf_reader = BufReader::new(self.task.get_file());
@@ -138,7 +150,7 @@ impl App {
                         fs::write(&self.task.file_path, new_file.join("\n").as_bytes())
                             .expect("Failed delete task")
                     }
-                    None => println!("Not found this task"),
+                    None => println!("{}", NOT_FOUND_T.red()),
                 }
             }
         }
