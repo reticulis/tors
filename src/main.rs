@@ -11,7 +11,7 @@ const ADDED: &str = "Task added!";
 const DESCRIPTION: &str = "Please enter a description of the task!";
 
 #[derive(Parser)]
-#[clap(version = "0.0.1-alpha")]
+#[clap(version = "0.0.2-alpha")]
 struct Cli {
     #[clap(subcommand)]
     command: Commands,
