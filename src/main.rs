@@ -8,6 +8,7 @@ use std::io::{BufReader, BufWriter, ErrorKind, Read, Write};
 const NOT_FOUND: &str = "Not found tasks!";
 const NOT_FOUND_T: &str = "Not found this task!";
 const ADDED: &str = "Task added!";
+const REMOVED: &str = "Task removed!";
 
 #[derive(Parser)]
 #[clap(version = "0.0.3-alpha")]
@@ -57,7 +58,7 @@ impl TaskFile {
     }
 
     fn create_dir(&self) -> File {
-        match fs::create_dir_all(&self.folder_path) {
+        match fs::create_dir(&self.folder_path) {
             Ok(()) => self.get_file(),
             Err(e) => match e.kind() {
                 ErrorKind::AlreadyExists => self.get_file(),
@@ -129,7 +130,7 @@ impl App {
             true => println!("{}", NOT_FOUND.red()),
             false => {
                 for (i, json) in string.lines().enumerate() {
-                    let j = json::parse(json).unwrap();
+                    let j = json::parse(json).expect("Failed parse JSON from file!");
                     match j["success"] == true {
                         true => show(color(true), j, i),
                         false => show(color(false), j, i),
@@ -144,7 +145,8 @@ impl App {
                 Some(_) => {
                     v.remove(id - 1);
                     fs::write(&self.task.file_path, v.join("\n").as_bytes())
-                        .expect("Failed delete task")
+                        .expect("Failed delete task");
+                    println!("{}", REMOVED.green());
                 }
                 None => println!("{}", NOT_FOUND_T.red()),
             },
