@@ -1,16 +1,55 @@
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
 use std::io;
+use std::ops::Sub;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Layout};
+use tui::style::Color::{LightBlue, White};
+use tui::style::{Modifier, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, Borders, List, ListItem};
+use tui::widgets::{Block, Borders, List, ListItem, ListState};
 use tui::{Frame, Terminal};
+
+#[derive(Default)]
+struct StatefulList {
+    state: ListState,
+    items: Vec<String>,
+}
+
+impl StatefulList {
+    fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i >= self.items.len().saturating_sub(1) {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.items.len().saturating_sub(1)
+                } else {
+                    i.saturating_sub(1)
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+}
 
 #[derive(Default)]
 pub struct App {
     mode: WindowMode,
-    tasks: Vec<String>,
+    tasks: StatefulList,
     input: String,
 }
 
@@ -42,6 +81,8 @@ impl App {
                         match key.code {
                             KeyCode::Char(' ') => {} // Mark task as done
                             KeyCode::Char('n') => self.mode = WindowMode::NewTask(EditMode::Edit), // New Task
+                            KeyCode::Down => self.tasks.next(),
+                            KeyCode::Up => self.tasks.previous(),
                             KeyCode::Enter => self.mode = WindowMode::EditTask(EditMode::View),
                             KeyCode::Esc => break,
                             _ => {}
@@ -52,20 +93,21 @@ impl App {
                         KeyCode::Char('e') => self.mode = WindowMode::EditTask(EditMode::Edit),
                         _ => {}
                     },
+                    // Todo
                     WindowMode::EditTask(EditMode::Edit) => {
-                        match key.code {
-                            KeyCode::Esc => self.mode = WindowMode::List,
-                            KeyCode::Char(n) => self.input.push(n), // Input text
-                            KeyCode::Enter => {
-                                let task: String = self.input.drain(..).collect();
-
-                                // Todo
-                                // Write into the file
-
-                                self.tasks.push(task);
-                            } // Save
-                            _ => {}
-                        }
+                        // match key.code {
+                        //     KeyCode::Esc => self.mode = WindowMode::List,
+                        //     KeyCode::Char(n) => self.input.push(n), // Input text
+                        //     KeyCode::Enter => {
+                        //         let task: String = self.input.drain(..).collect();
+                        //
+                        //         // Todo
+                        //         // Write into the file
+                        //
+                        //         self.tasks.items.push(task);
+                        //     } // Save
+                        //     _ => {}
+                        // }
                     }
                     WindowMode::NewTask(EditMode::View) => match key.code {
                         KeyCode::Esc => self.mode = WindowMode::List,
@@ -82,7 +124,7 @@ impl App {
                                 // Todo
                                 // Write into the file
 
-                                self.tasks.push(task);
+                                self.tasks.items.push(task);
                             } // Save
                             _ => {}
                         }
@@ -109,6 +151,7 @@ impl App {
 
         let tasks: Vec<ListItem> = self
             .tasks
+            .items
             .iter()
             .map(|c| {
                 let content = vec![Spans::from(Span::raw(c))];
@@ -116,8 +159,10 @@ impl App {
             })
             .collect();
 
-        let tasks = List::new(tasks).block(Block::default().borders(Borders::ALL).title(" Tasks "));
+        let tasks = List::new(tasks)
+            .block(Block::default().borders(Borders::ALL).title(" Tasks "))
+            .highlight_style(Style::default().bg(LightBlue).add_modifier(Modifier::BOLD));
 
-        f.render_widget(tasks, layout[0])
+        f.render_stateful_widget(tasks, layout[0], &mut self.tasks.state)
     }
 }
