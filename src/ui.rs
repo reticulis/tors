@@ -1,14 +1,13 @@
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
 use std::io;
-use std::ops::Sub;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Layout};
-use tui::style::Color::{LightBlue, White};
-use tui::style::{Modifier, Style};
+use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, Borders, List, ListItem, ListState};
+use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Default)]
 struct StatefulList {
@@ -50,13 +49,13 @@ impl StatefulList {
 pub struct App {
     mode: WindowMode,
     tasks: StatefulList,
-    input: String,
+    title_input: String,
+    task_input: String,
 }
 
 pub enum WindowMode {
     List,
-    NewTask(EditMode),
-    EditTask(EditMode),
+    Task(EditMode),
 }
 
 impl Default for WindowMode {
@@ -67,7 +66,12 @@ impl Default for WindowMode {
 
 pub enum EditMode {
     View,
-    Edit,
+    Edit(EditState),
+}
+
+pub enum EditState {
+    Title,
+    Task,
 }
 
 impl App {
@@ -80,52 +84,48 @@ impl App {
                     WindowMode::List => {
                         match key.code {
                             KeyCode::Char(' ') => {} // Mark task as done
-                            KeyCode::Char('n') => self.mode = WindowMode::NewTask(EditMode::Edit), // New Task
+                            KeyCode::Char('n') => {
+                                self.mode = WindowMode::Task(EditMode::Edit(EditState::Title))
+                            } // New Task
                             KeyCode::Down => self.tasks.next(),
                             KeyCode::Up => self.tasks.previous(),
-                            KeyCode::Enter => self.mode = WindowMode::EditTask(EditMode::View),
+                            KeyCode::Enter => self.mode = WindowMode::Task(EditMode::View),
                             KeyCode::Esc => break,
                             _ => {}
                         }
                     }
-                    WindowMode::EditTask(EditMode::View) => match key.code {
-                        KeyCode::Esc => self.mode = WindowMode::List,
-                        KeyCode::Char('e') => self.mode = WindowMode::EditTask(EditMode::Edit),
+                    WindowMode::Task(EditMode::View) => match key.code {
+                        KeyCode::Esc => {
+                            self.task_input.clear();
+                            self.title_input.clear();
+                            self.mode = WindowMode::List;
+                        }
+                        KeyCode::Char('t') => {
+                            // Edit title
+                            self.mode = WindowMode::Task(EditMode::Edit(EditState::Title))
+                        }
+                        KeyCode::Char('e') => {
+                            // Edit task content
+                            self.mode = WindowMode::Task(EditMode::Edit(EditState::Task))
+                        }
+                        KeyCode::Char('s') => {
+                            // Save task
+                            todo!()
+                        }
                         _ => {}
                     },
                     // Todo
-                    WindowMode::EditTask(EditMode::Edit) => {
-                        // match key.code {
-                        //     KeyCode::Esc => self.mode = WindowMode::List,
-                        //     KeyCode::Char(n) => self.input.push(n), // Input text
-                        //     KeyCode::Enter => {
-                        //         let task: String = self.input.drain(..).collect();
-                        //
-                        //         // Todo
-                        //         // Write into the file
-                        //
-                        //         self.tasks.items.push(task);
-                        //     } // Save
-                        //     _ => {}
-                        // }
-                    }
-                    WindowMode::NewTask(EditMode::View) => match key.code {
-                        KeyCode::Esc => self.mode = WindowMode::List,
-                        KeyCode::Char('e') => self.mode = WindowMode::NewTask(EditMode::Edit),
-                        _ => {}
-                    },
-                    WindowMode::NewTask(EditMode::Edit) => {
+                    WindowMode::Task(EditMode::Edit(EditState::Title)) => {
                         match key.code {
-                            KeyCode::Esc => self.mode = WindowMode::List,
-                            KeyCode::Char(n) => self.input.push(n), // Input text
-                            KeyCode::Enter => {
-                                let task: String = self.input.drain(..).collect();
-
-                                // Todo
-                                // Write into the file
-
-                                self.tasks.items.push(task);
-                            } // Save
+                            KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
+                            KeyCode::Char(n) => self.title_input.push(n), // Input title text
+                            _ => {}
+                        }
+                    }
+                    WindowMode::Task(EditMode::Edit(EditState::Task)) => {
+                        match key.code {
+                            KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
+                            KeyCode::Char(n) => self.task_input.push(n), // Input task text
                             _ => {}
                         }
                     }
@@ -138,12 +138,12 @@ impl App {
 
     fn ui<B: Backend>(&mut self, f: &mut Frame<B>) {
         match self.mode {
-            WindowMode::List => self.list_view(f),
-            _ => {}
+            WindowMode::List => self.tasks_window(f),
+            WindowMode::Task(_) => self.view_window(f),
         }
     }
 
-    fn list_view<B: Backend>(&mut self, f: &mut Frame<B>) {
+    fn tasks_window<B: Backend>(&mut self, f: &mut Frame<B>) {
         let layout = Layout::default()
             .margin(2)
             .constraints([Constraint::Percentage(100)])
@@ -161,8 +161,60 @@ impl App {
 
         let tasks = List::new(tasks)
             .block(Block::default().borders(Borders::ALL).title(" Tasks "))
-            .highlight_style(Style::default().bg(LightBlue).add_modifier(Modifier::BOLD));
+            .highlight_style(
+                Style::default()
+                    .bg(Color::LightBlue)
+                    .add_modifier(Modifier::BOLD),
+            );
 
         f.render_stateful_widget(tasks, layout[0], &mut self.tasks.state)
+    }
+
+    fn view_window<B: Backend>(&mut self, f: &mut Frame<B>) {
+        let layout = Layout::default()
+            .margin(2)
+            .constraints([Constraint::Percentage(10), Constraint::Percentage(90)])
+            .split(f.size());
+
+        let title_block = Paragraph::new(self.title_input.as_ref())
+            .style(match self.mode {
+                WindowMode::Task(EditMode::Edit(EditState::Title)) => {
+                    Style::default().fg(Color::Cyan)
+                }
+                _ => Style::default(),
+            })
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            );
+
+        let task_block = Paragraph::new(self.task_input.as_ref())
+            .style(match self.mode {
+                WindowMode::Task(EditMode::Edit(EditState::Task)) => {
+                    Style::default().fg(Color::Green)
+                }
+                _ => Style::default(),
+            })
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            );
+
+        match self.mode {
+            WindowMode::Task(EditMode::Edit(EditState::Title)) => f.set_cursor(
+                layout[0].x + self.title_input.width() as u16 + 1,
+                layout[0].y + 1,
+            ),
+            WindowMode::Task(EditMode::Edit(EditState::Task)) => f.set_cursor(
+                layout[1].x + self.task_input.width() as u16 + 1,
+                layout[1].y + 1,
+            ),
+            _ => {}
+        }
+
+        f.render_widget(title_block, layout[0]);
+        f.render_widget(task_block, layout[1]);
     }
 }
