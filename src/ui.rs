@@ -51,6 +51,11 @@ pub struct App {
     tasks: StatefulList,
     title_input: String,
     task_input: String,
+    cursor_pos_x: u16,
+    cursor_pos_y: u16,
+    title_line_width: u8,
+    description_line_width: u8,
+    width: u16,
 }
 
 pub enum WindowMode {
@@ -98,6 +103,7 @@ impl App {
                         KeyCode::Esc => {
                             self.task_input.clear();
                             self.title_input.clear();
+                            self.cursor_pos_y = 0;
                             self.mode = WindowMode::List;
                         }
                         KeyCode::Char('t') => {
@@ -115,26 +121,47 @@ impl App {
                         _ => {}
                     },
                     // Todo
-                    WindowMode::Task(EditMode::Edit(EditState::Title)) => {
-                        match key.code {
-                            KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
-                            KeyCode::Char(n) => self.title_input.push(n), // Input title text
-                            KeyCode::Backspace => {
-                                self.title_input.pop();
-                            },
-                            _ => {}
-                        }
-                    }
-                    WindowMode::Task(EditMode::Edit(EditState::Task)) => {
-                        match key.code {
-                            KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
-                            KeyCode::Char(n) => self.task_input.push(n), // Input task text
-                            KeyCode::Backspace => {
-                                self.task_input.pop();
+                    WindowMode::Task(EditMode::Edit(EditState::Title)) => match key.code {
+                        KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
+                        KeyCode::Char(n) => {
+                            self.title_line_width = self.title_input.width() as u8;
+
+                            if self.title_line_width as u16 == self.width.saturating_sub(3) {
+                                continue
                             }
-                            _ => {}
+
+                            self.title_input.push(n);
+                        },
+                        KeyCode::Backspace => {
+                            self.title_input.pop();
                         }
-                    }
+                        _ => {}
+                    },
+                    WindowMode::Task(EditMode::Edit(EditState::Task)) => match key.code {
+                        KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
+                        KeyCode::Char(n) => {
+                            self.task_input.push(n);
+                            if self.description_line_width as u16 == self.width.saturating_sub(3) {
+                                self.task_input.push('\n');
+                                self.cursor_pos_y += 1;
+                                continue;
+                            }
+                        }
+                        KeyCode::Enter => {
+                            self.task_input.push('\n');
+                            self.cursor_pos_y += 1;
+                        }
+                        KeyCode::Backspace => {
+                            self.task_input.pop();
+
+                            if self.cursor_pos_x == 0 {
+                                self.cursor_pos_y = self.cursor_pos_y.saturating_sub(1);
+                                self.task_input.pop();
+                                continue;
+                            }
+                        }
+                        _ => {}
+                    },
                 }
             }
         }
@@ -177,10 +204,15 @@ impl App {
     }
 
     fn view_window<B: Backend>(&mut self, f: &mut Frame<B>) {
+        self.description_line_width = self.task_input.split('\n').last().unwrap().width() as u8;
+        self.cursor_pos_x = self.description_line_width as u16;
+
         let layout = Layout::default()
             .margin(2)
-            .constraints([Constraint::Percentage(10), Constraint::Percentage(90)])
+            .constraints([Constraint::Percentage(7), Constraint::Percentage(93)])
             .split(f.size());
+
+        self.width = layout[1].width;
 
         let title_block = Paragraph::new(self.title_input.as_ref())
             .style(match self.mode {
@@ -191,19 +223,7 @@ impl App {
             })
             .block(
                 Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded),
-            );
-
-        let task_block = Paragraph::new(self.task_input.as_ref())
-            .style(match self.mode {
-                WindowMode::Task(EditMode::Edit(EditState::Task)) => {
-                    Style::default().fg(Color::Green)
-                }
-                _ => Style::default(),
-            })
-            .block(
-                Block::default()
+                    .title(" Title ")
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             );
@@ -214,11 +234,25 @@ impl App {
                 layout[0].y + 1,
             ),
             WindowMode::Task(EditMode::Edit(EditState::Task)) => f.set_cursor(
-                layout[1].x + self.task_input.width() as u16 + 1,
-                layout[1].y + 1,
+                layout[1].x + self.cursor_pos_x + 1,
+                layout[1].y + self.cursor_pos_y + 1,
             ),
             _ => {}
         }
+
+        let task_block = Paragraph::new(self.task_input.as_ref())
+            .style(match self.mode {
+                WindowMode::Task(EditMode::Edit(EditState::Task)) => {
+                    Style::default().fg(Color::Green)
+                }
+                _ => Style::default(),
+            })
+            .block(
+                Block::default()
+                    .title(" Description ")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
+            );
 
         f.render_widget(title_block, layout[0]);
         f.render_widget(task_block, layout[1]);
