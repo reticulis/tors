@@ -119,6 +119,9 @@ impl App {
                         match key.code {
                             KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
                             KeyCode::Char(n) => self.title_input.push(n), // Input title text
+                            KeyCode::Backspace => {
+                                self.title_input.pop();
+                            },
                             _ => {}
                         }
                     }
@@ -126,6 +129,9 @@ impl App {
                         match key.code {
                             KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
                             KeyCode::Char(n) => self.task_input.push(n), // Input task text
+                            KeyCode::Backspace => {
+                                self.task_input.pop();
+                            }
                             _ => {}
                         }
                     }
