@@ -1,6 +1,8 @@
-use crossterm::event;
-use crossterm::event::{Event, KeyCode};
-use std::io;
+use anyhow::Result;
+use bincode::config::Configuration;
+use chrono::{Datelike, Timelike};
+use serde::{Deserialize, Serialize};
+use sled::Db;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Layout};
 use tui::style::{Color, Modifier, Style};
@@ -8,15 +10,16 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
+use crate::keyboard::Status;
 
 #[derive(Default)]
-struct StatefulList {
-    state: ListState,
-    items: Vec<String>,
+pub(crate) struct StatefulList {
+    pub(crate) state: ListState,
+    pub(crate) items: Vec<(String, String)>,
 }
 
 impl StatefulList {
-    fn next(&mut self) {
+    pub(crate) fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
                 if i >= self.items.len().saturating_sub(1) {
@@ -30,7 +33,7 @@ impl StatefulList {
         self.state.select(Some(i));
     }
 
-    fn previous(&mut self) {
+    pub(crate) fn previous(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -45,17 +48,32 @@ impl StatefulList {
     }
 }
 
+struct Database {
+    database: Db,
+    config: Configuration,
+}
+
+impl Default for Database {
+    fn default() -> Self {
+        Self {
+            database: sled::open("/tmp/tors").unwrap(),
+            config: bincode::config::standard(),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct App {
-    mode: WindowMode,
-    tasks: StatefulList,
-    title_input: String,
-    task_input: String,
-    cursor_pos_x: u16,
-    cursor_pos_y: u16,
-    title_line_width: u8,
-    description_line_width: u8,
-    width: u16,
+    database: Database,
+    pub(crate) mode: WindowMode,
+    pub(crate) tasks: StatefulList,
+    pub(crate) title_input: String,
+    pub(crate) task_input: String,
+    pub(crate) cursor_pos_x: u16,
+    pub(crate) cursor_pos_y: u16,
+    pub(crate) title_line_width: u8,
+    pub(crate) description_line_width: u8,
+    pub(crate) width: u16,
 }
 
 pub enum WindowMode {
@@ -79,92 +97,85 @@ pub enum EditState {
     Task,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Task {
+    pub(crate) title: String,
+    pub(crate) description: String,
+    // TODO
+    // another parameters
+}
+
 impl App {
-    pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+    pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()>{
+        self.update_tasks()?;
+
         loop {
             terminal.draw(|f| self.ui(f))?;
 
-            if let Event::Key(key) = event::read()? {
-                match self.mode {
-                    WindowMode::List => {
-                        match key.code {
-                            KeyCode::Char(' ') => {} // Mark task as done
-                            KeyCode::Char('n') => {
-                                self.mode = WindowMode::Task(EditMode::Edit(EditState::Title))
-                            } // New Task
-                            KeyCode::Down => self.tasks.next(),
-                            KeyCode::Up => self.tasks.previous(),
-                            KeyCode::Enter => self.mode = WindowMode::Task(EditMode::View),
-                            KeyCode::Esc => break,
-                            _ => {}
-                        }
-                    }
-                    WindowMode::Task(EditMode::View) => match key.code {
-                        KeyCode::Esc => {
-                            self.task_input.clear();
-                            self.title_input.clear();
-                            self.cursor_pos_y = 0;
-                            self.mode = WindowMode::List;
-                        }
-                        KeyCode::Char('t') => {
-                            // Edit title
-                            self.mode = WindowMode::Task(EditMode::Edit(EditState::Title))
-                        }
-                        KeyCode::Char('e') => {
-                            // Edit task content
-                            self.mode = WindowMode::Task(EditMode::Edit(EditState::Task))
-                        }
-                        KeyCode::Char('s') => {
-                            // Save task
-                            todo!()
-                        }
-                        _ => {}
-                    },
-                    // Todo
-                    WindowMode::Task(EditMode::Edit(EditState::Title)) => match key.code {
-                        KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
-                        KeyCode::Char(n) => {
-                            self.title_line_width = self.title_input.width() as u8;
-
-                            if self.title_line_width as u16 == self.width.saturating_sub(3) {
-                                continue
-                            }
-
-                            self.title_input.push(n);
-                        },
-                        KeyCode::Backspace => {
-                            self.title_input.pop();
-                        }
-                        _ => {}
-                    },
-                    WindowMode::Task(EditMode::Edit(EditState::Task)) => match key.code {
-                        KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
-                        KeyCode::Char(n) => {
-                            self.task_input.push(n);
-                            if self.description_line_width as u16 == self.width.saturating_sub(3) {
-                                self.task_input.push('\n');
-                                self.cursor_pos_y += 1;
-                                continue;
-                            }
-                        }
-                        KeyCode::Enter => {
-                            self.task_input.push('\n');
-                            self.cursor_pos_y += 1;
-                        }
-                        KeyCode::Backspace => {
-                            self.task_input.pop();
-
-                            if self.cursor_pos_x == 0 {
-                                self.cursor_pos_y = self.cursor_pos_y.saturating_sub(1);
-                                self.task_input.pop();
-                                continue;
-                            }
-                        }
-                        _ => {}
-                    },
+            match self.event() {
+                Ok(Status::ExitApp) => {
+                    return Ok(())
                 }
-            }
+                Ok(Status::Ignore) => {
+                    continue
+                }
+                Err(e) => {
+                    return Err(e)
+                }
+            };
         }
+    }
+
+    pub(crate) fn get_task(&mut self, i: usize) -> Result<Task> {
+        // TODO
+        // Improve performance
+        // Copy data!
+        let (id, _) = self.tasks.items.get(i).unwrap();
+
+        // TODO
+        // Improve handling error!
+        let ivec = self.database.database.get(id)?.unwrap();
+        let (task, _) = bincode::serde::decode_from_slice::<Task, _>(&ivec, self.database.config)?;
+
+        Ok(task)
+    }
+
+    pub(crate) fn update_tasks(&mut self) -> Result<()> {
+        self.tasks.items = self.database.database.iter().map(|d| {
+            let (id, task) = d.unwrap();
+
+            let (task, _) = bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config).unwrap();
+            let id= String::from_utf8(id.to_vec()).unwrap();
+
+            (id, task.title)
+        }).collect();
+
+        Ok(())
+    }
+
+    pub(crate) fn update_database(&mut self) -> Result<()> {
+        let chr = chrono::Local::now();
+
+        let date = format!(
+            "{}-{}-{} {}:{}:{}",
+            chr.year(),
+            chr.month(),
+            chr.day(),
+            chr.hour(),
+            chr.minute(),
+            chr.second()
+        );
+
+        self.database.database.insert(
+            &date,
+            bincode::serde::encode_to_vec(
+                Task {
+                    title: self.title_input.drain(..).collect(),
+                    description: self.task_input.drain(..).collect(),
+                },
+                self.database.config,
+            )?,
+        )?;
 
         Ok(())
     }
@@ -186,8 +197,8 @@ impl App {
             .tasks
             .items
             .iter()
-            .map(|c| {
-                let content = vec![Spans::from(Span::raw(c))];
+            .map(|(_, t)| {
+                let content = vec![Spans::from(Span::raw(t))];
                 ListItem::new(content)
             })
             .collect();

@@ -1,4 +1,5 @@
 mod ui;
+mod keyboard;
 
 use crate::ui::App;
 use anyhow::Result;
