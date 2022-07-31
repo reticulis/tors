@@ -1,3 +1,4 @@
+use crate::keyboard::Status;
 use anyhow::Result;
 use bincode::config::Configuration;
 use chrono::{Datelike, Timelike};
@@ -10,7 +11,6 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
-use crate::keyboard::Status;
 
 #[derive(Default)]
 pub(crate) struct StatefulList {
@@ -67,8 +67,8 @@ pub struct App {
     database: Database,
     pub(crate) mode: WindowMode,
     pub(crate) tasks: StatefulList,
-    pub(crate) title_input: String,
-    pub(crate) task_input: String,
+    pub(crate) task: Task,
+    pub(crate) new_task: bool,
     pub(crate) cursor_pos_x: u16,
     pub(crate) cursor_pos_y: u16,
     pub(crate) title_line_width: u8,
@@ -97,7 +97,7 @@ pub enum EditState {
     Task,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Task {
     pub(crate) title: String,
     pub(crate) description: String,
@@ -106,22 +106,16 @@ pub struct Task {
 }
 
 impl App {
-    pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()>{
+    pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         self.update_tasks()?;
 
         loop {
             terminal.draw(|f| self.ui(f))?;
 
             match self.event() {
-                Ok(Status::ExitApp) => {
-                    return Ok(())
-                }
-                Ok(Status::Ignore) => {
-                    continue
-                }
-                Err(e) => {
-                    return Err(e)
-                }
+                Ok(Status::ExitApp) => return Ok(()),
+                Ok(Status::Ignore) => continue,
+                Err(e) => return Err(e),
             };
         }
     }
@@ -141,23 +135,30 @@ impl App {
     }
 
     pub(crate) fn update_tasks(&mut self) -> Result<()> {
-        self.tasks.items = self.database.database.iter().map(|d| {
-            let (id, task) = d.unwrap();
+        self.tasks.items = self
+            .database
+            .database
+            .iter()
+            .map(|d| {
+                let (id, task) = d.unwrap();
 
-            let (task, _) = bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config).unwrap();
-            let id= String::from_utf8(id.to_vec()).unwrap();
+                let (task, _) =
+                    bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)
+                        .unwrap();
+                let id = String::from_utf8(id.to_vec()).unwrap();
 
-            (id, task.title)
-        }).collect();
+                (id, task.title)
+            })
+            .collect();
 
         Ok(())
     }
 
-    pub(crate) fn update_database(&mut self) -> Result<()> {
+    pub(crate) fn add_to_db(&mut self) -> Result<()> {
         let chr = chrono::Local::now();
 
         let date = format!(
-            "{}-{}-{} {}:{}:{}",
+            "{}-{:>02}-{:>02} {:>02}:{:>02}:{:>02}",
             chr.year(),
             chr.month(),
             chr.day(),
@@ -166,12 +167,26 @@ impl App {
             chr.second()
         );
 
+        self.insert(&date)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn update_db(&mut self) -> Result<()> {
+        if let Some((id, _)) = &self.tasks.items.get(self.tasks.state.selected().unwrap()) {
+            self.insert(&id.to_string())?;
+        }
+
+        Ok(())
+    }
+
+    fn insert(&mut self, date: &str) -> Result<()> {
         self.database.database.insert(
-            &date,
+            date,
             bincode::serde::encode_to_vec(
                 Task {
-                    title: self.title_input.drain(..).collect(),
-                    description: self.task_input.drain(..).collect(),
+                    title: self.task.title.drain(..).collect(),
+                    description: self.task.description.drain(..).collect(),
                 },
                 self.database.config,
             )?,
@@ -215,7 +230,7 @@ impl App {
     }
 
     fn view_window<B: Backend>(&mut self, f: &mut Frame<B>) {
-        self.description_line_width = self.task_input.split('\n').last().unwrap().width() as u8;
+        self.description_line_width = self.task.description.split('\n').last().unwrap().width() as u8;
         self.cursor_pos_x = self.description_line_width as u16;
 
         let layout = Layout::default()
@@ -225,7 +240,7 @@ impl App {
 
         self.width = layout[1].width;
 
-        let title_block = Paragraph::new(self.title_input.as_ref())
+        let title_block = Paragraph::new(self.task.title.as_ref())
             .style(match self.mode {
                 WindowMode::Task(EditMode::Edit(EditState::Title)) => {
                     Style::default().fg(Color::Cyan)
@@ -241,7 +256,7 @@ impl App {
 
         match self.mode {
             WindowMode::Task(EditMode::Edit(EditState::Title)) => f.set_cursor(
-                layout[0].x + self.title_input.width() as u16 + 1,
+                layout[0].x + self.task.title.width() as u16 + 1,
                 layout[0].y + 1,
             ),
             WindowMode::Task(EditMode::Edit(EditState::Task)) => f.set_cursor(
@@ -251,7 +266,7 @@ impl App {
             _ => {}
         }
 
-        let task_block = Paragraph::new(self.task_input.as_ref())
+        let task_block = Paragraph::new(self.task.description.as_ref())
             .style(match self.mode {
                 WindowMode::Task(EditMode::Edit(EditState::Task)) => {
                     Style::default().fg(Color::Green)
