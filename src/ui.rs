@@ -72,7 +72,6 @@ pub struct App {
     pub(crate) cursor_pos_x: u16,
     pub(crate) cursor_pos_y: u16,
     pub(crate) title_line_width: u8,
-    pub(crate) description_line_width: u8,
     pub(crate) width: u16,
 }
 
@@ -230,8 +229,7 @@ impl App {
     }
 
     fn view_window<B: Backend>(&mut self, f: &mut Frame<B>) {
-        self.description_line_width = self.task.description.split('\n').last().unwrap().width() as u8;
-        self.cursor_pos_x = self.description_line_width as u16;
+        self.cursor_pos_x = self.task.description.split('\n').last().unwrap().width() as u16;
 
         let layout = Layout::default()
             .margin(2)

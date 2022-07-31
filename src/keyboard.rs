@@ -30,6 +30,11 @@ impl App {
 
                                 self.task.title = task.title;
                                 self.task.description = task.description;
+                                self.cursor_pos_x =
+                                    self.task.description.split('\n').last().unwrap().len() as u16;
+                                self.cursor_pos_y =
+                                    self.task.description.split('\n').count().saturating_sub(1)
+                                        as u16;
 
                                 self.new_task = false;
                                 self.mode = WindowMode::Task(EditMode::View)
@@ -58,7 +63,7 @@ impl App {
                         if self.new_task {
                             self.add_to_db()?;
                         } else {
-                            self.update_db() ?;
+                            self.update_db()?;
                         }
 
                         self.update_tasks()?;
@@ -87,7 +92,7 @@ impl App {
                     KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
                     KeyCode::Char(n) => {
                         self.task.description.push(n);
-                        if self.description_line_width as u16 == self.width.saturating_sub(3) {
+                        if self.cursor_pos_x as u16 == self.width.saturating_sub(3) {
                             self.task.description.push('\n');
                             self.cursor_pos_y += 1;
                             return Ok(Status::Ignore);
