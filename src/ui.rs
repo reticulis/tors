@@ -1,5 +1,5 @@
 use crate::keyboard::Status;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bincode::config::Configuration;
 use chrono::{Datelike, Timelike};
 use serde::{Deserialize, Serialize};
@@ -123,11 +123,14 @@ impl App {
         // TODO
         // Improve performance
         // Copy data!
-        let (id, _) = self.tasks.items.get(i).unwrap();
+        let (id, _) = self.tasks.items.get(i).with_context(|| "Not found task!")?;
 
-        // TODO
-        // Improve handling error!
-        let ivec = self.database.database.get(id)?.unwrap();
+        let ivec = self
+            .database
+            .database
+            .get(id)?
+            .with_context(|| "Not found in database")?;
+
         let (task, _) = bincode::serde::decode_from_slice::<Task, _>(&ivec, self.database.config)?;
 
         Ok(task)
@@ -138,17 +141,16 @@ impl App {
             .database
             .database
             .iter()
-            .map(|d| {
-                let (id, task) = d.unwrap();
+            .map(|v| {
+                let (id, task) = v?;
 
                 let (task, _) =
-                    bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)
-                        .unwrap();
-                let id = String::from_utf8(id.to_vec()).unwrap();
+                    bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)?;
+                let id = String::from_utf8_lossy(&id).parse::<String>()?;
 
-                (id, task.title)
+                Ok((id, task.title))
             })
-            .collect();
+            .collect::<Result<Vec<(String, String)>>>()?;
 
         Ok(())
     }
@@ -172,7 +174,11 @@ impl App {
     }
 
     pub(crate) fn update_db(&mut self) -> Result<()> {
-        if let Some((id, _)) = &self.tasks.items.get(self.tasks.state.selected().unwrap()) {
+        if let Some((id, _)) = &self
+            .tasks
+            .items
+            .get(self.tasks.state.selected().unwrap_or(0))
+        {
             self.insert(&id.to_string())?;
         }
 
