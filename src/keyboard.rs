@@ -75,9 +75,7 @@ impl App {
                 WindowMode::Task(EditMode::Edit(EditState::Title)) => match key.code {
                     KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
                     KeyCode::Char(n) => {
-                        self.title_line_width = self.task.title.width() as u8;
-
-                        if self.title_line_width as u16 == self.width.saturating_sub(3) {
+                        if self.task.title.width() as u16 == self.width.saturating_sub(3) {
                             return Ok(Status::Ignore);
                         }
 

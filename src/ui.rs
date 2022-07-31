@@ -71,7 +71,6 @@ pub struct App {
     pub(crate) new_task: bool,
     pub(crate) cursor_pos_x: u16,
     pub(crate) cursor_pos_y: u16,
-    pub(crate) title_line_width: u8,
     pub(crate) width: u16,
 }
 
