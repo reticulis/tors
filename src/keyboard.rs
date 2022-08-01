@@ -1,4 +1,4 @@
-use crate::ui::{EditMode, EditState, WindowMode};
+use crate::ui::{EditMode, EditState, Task, WindowMode};
 use crate::App;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
@@ -30,6 +30,7 @@ impl App {
 
                                 self.task.title = task.title;
                                 self.task.description = task.description;
+
                                 self.cursor_pos_x =
                                     self.task.description.split('\n').last().unwrap().len() as u16;
                                 self.cursor_pos_y =
@@ -46,8 +47,8 @@ impl App {
                 }
                 WindowMode::Task(EditMode::View) => match key.code {
                     KeyCode::Esc => {
-                        self.task.title.clear();
-                        self.task.description.clear();
+                        self.task = Task::default();
+
                         self.cursor_pos_y = 0;
                         self.mode = WindowMode::List;
                     }
@@ -67,6 +68,8 @@ impl App {
                         }
 
                         self.update_tasks()?;
+
+                        self.task = Task::default();
 
                         self.mode = WindowMode::List;
                     }

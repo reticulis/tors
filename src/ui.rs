@@ -15,7 +15,7 @@ use unicode_width::UnicodeWidthStr;
 #[derive(Default)]
 pub(crate) struct StatefulList {
     pub(crate) state: ListState,
-    pub(crate) items: Vec<(String, String)>,
+    pub(crate) items: Vec<(String, Task)>,
 }
 
 impl StatefulList {
@@ -95,10 +95,11 @@ pub enum EditState {
     Task,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct Task {
     pub(crate) title: String,
     pub(crate) description: String,
+    pub(crate) daily_repeat: bool,
     // TODO
     // another parameters
 }
@@ -147,9 +148,9 @@ impl App {
                     bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)?;
                 let id = String::from_utf8_lossy(&id).parse::<String>()?;
 
-                Ok((id, task.title))
+                Ok((id, task))
             })
-            .collect::<Result<Vec<(String, String)>>>()?;
+            .collect::<Result<Vec<(String, Task)>>>()?;
 
         Ok(())
     }
@@ -188,10 +189,7 @@ impl App {
         self.database.database.insert(
             date,
             bincode::serde::encode_to_vec(
-                Task {
-                    title: self.task.title.drain(..).collect(),
-                    description: self.task.description.drain(..).collect(),
-                },
+                self.task.clone(),
                 self.database.config,
             )?,
         )?;
@@ -217,7 +215,7 @@ impl App {
             .items
             .iter()
             .map(|(_, t)| {
-                let content = vec![Spans::from(Span::raw(t))];
+                let content = vec![Spans::from(Span::raw(&t.title))];
                 ListItem::new(content)
             })
             .collect();
