@@ -1,4 +1,3 @@
-use crate::keyboard::Status;
 use anyhow::{Context, Result};
 use bincode::config::Configuration;
 use chrono::{Datelike, Timelike};
@@ -112,11 +111,7 @@ impl App {
         loop {
             terminal.draw(|f| self.ui(f))?;
 
-            match self.event() {
-                Ok(Status::ExitApp) => return Ok(()),
-                Ok(Status::Ignore) => continue,
-                Err(e) => return Err(e),
-            };
+            self.event()?
         }
     }
 
