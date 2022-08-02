@@ -99,6 +99,7 @@ pub enum EditState {
 pub struct Task {
     pub(crate) title: String,
     pub(crate) description: String,
+    pub(crate) done: bool,
     pub(crate) daily_repeat: bool,
     // TODO
     // another parameters
@@ -188,10 +189,7 @@ impl App {
     fn insert(&mut self, date: &str) -> Result<()> {
         self.database.database.insert(
             date,
-            bincode::serde::encode_to_vec(
-                self.task.clone(),
-                self.database.config,
-            )?,
+            bincode::serde::encode_to_vec(self.task.clone(), self.database.config)?,
         )?;
 
         Ok(())
@@ -215,7 +213,12 @@ impl App {
             .items
             .iter()
             .map(|(_, t)| {
-                let content = vec![Spans::from(Span::raw(&t.title))];
+                let (status, style) = if t.done {
+                    ("✅ ".to_string(), Style::default().fg(Color::Green))
+                } else {
+                    ("❌ ".to_string(), Style::default())
+                };
+                let content = vec![Spans::from(Span::styled(status + &t.title, style))];
                 ListItem::new(content)
             })
             .collect();
