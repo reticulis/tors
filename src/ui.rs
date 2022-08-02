@@ -120,11 +120,20 @@ impl App {
         }
     }
 
-    pub(crate) fn get_task(&mut self, i: usize) -> Result<Task> {
+    pub(crate) fn get_task(&mut self) -> Result<Task> {
         // TODO
         // Improve performance
         // Copy data!
-        let (id, _) = self.tasks.items.get(i).with_context(|| "Not found task!")?;
+        let (id, _) = self
+            .tasks
+            .items
+            .get(
+                self.tasks
+                    .state
+                    .selected()
+                    .with_context(|| "Failed get element")?,
+            )
+            .with_context(|| "Not found task!")?;
 
         let ivec = self
             .database
@@ -170,6 +179,19 @@ impl App {
         );
 
         self.insert(&date)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn rm_from_db(&mut self) -> Result<()> {
+        if let Some((id, _)) = &self.tasks.items.get(
+            self.tasks
+                .state
+                .selected()
+                .with_context(|| "Failed get element")?,
+        ) {
+            self.database.database.remove(id)?;
+        }
 
         Ok(())
     }

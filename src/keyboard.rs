@@ -17,38 +17,38 @@ impl App {
             match self.mode {
                 WindowMode::List => match key.code {
                     KeyCode::Char(' ') => {
-                        if let Some(i) = self.tasks.state.selected() {
-                            let mut task = self.get_task(i)?;
-                            task.done = !task.done;
+                        let mut task = self.get_task()?;
+                        task.done = !task.done;
 
-                            self.task = task;
+                        self.task = task;
 
-                            self.update_db()?;
-                            self.update_tasks()?;
+                        self.update_db()?;
+                        self.update_tasks()?;
 
-                            self.task = Task::default();
-                        }
+                        self.task = Task::default();
                     }
                     KeyCode::Char('n') => {
                         self.new_task = true;
                         self.mode = WindowMode::Task(EditMode::Edit(EditState::Title))
                     }
+                    KeyCode::Char('d') => {
+                        self.rm_from_db()?;
+                        self.update_tasks()?;
+                    }
                     KeyCode::Down => self.tasks.next(),
                     KeyCode::Up => self.tasks.previous(),
                     KeyCode::Enter => {
-                        if let Some(i) = self.tasks.state.selected() {
-                            let task = self.get_task(i)?;
+                        let task = self.get_task()?;
 
-                            self.task = task;
+                        self.task = task;
 
-                            self.cursor_pos_x =
-                                self.task.description.split('\n').last().unwrap().len() as u16;
-                            self.cursor_pos_y =
-                                self.task.description.split('\n').count().saturating_sub(1) as u16;
+                        self.cursor_pos_x =
+                            self.task.description.split('\n').last().unwrap().len() as u16;
+                        self.cursor_pos_y =
+                            self.task.description.split('\n').count().saturating_sub(1) as u16;
 
-                            self.new_task = false;
-                            self.mode = WindowMode::Task(EditMode::View)
-                        }
+                        self.new_task = false;
+                        self.mode = WindowMode::Task(EditMode::View)
                     }
                     KeyCode::Esc => return Ok(Status::ExitApp),
                     _ => {}
