@@ -1,7 +1,6 @@
 use anyhow::Result;
-use bincode::config::Configuration;
+use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
-use sled::Db;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Layout};
 use tui::style::{Color, Modifier, Style};
@@ -9,6 +8,7 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
+use crate::database::Database;
 
 #[derive(Default)]
 pub(crate) struct StatefulList {
@@ -43,20 +43,6 @@ impl StatefulList {
             None => 0,
         };
         self.state.select(Some(i));
-    }
-}
-
-pub struct Database {
-    pub(crate) database: Db,
-    pub(crate) config: Configuration,
-}
-
-impl Default for Database {
-    fn default() -> Self {
-        Self {
-            database: sled::open("/tmp/tors").unwrap(),
-            config: bincode::config::standard(),
-        }
     }
 }
 
@@ -99,6 +85,7 @@ pub struct Task {
     pub(crate) description: String,
     pub(crate) done: bool,
     pub(crate) daily_repeat: bool,
+    pub(crate) expire: String,
     // TODO
     // another parameters
 }

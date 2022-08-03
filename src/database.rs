@@ -1,7 +1,23 @@
 use crate::ui::Task;
 use crate::App;
 use anyhow::{Context, Result};
+use bincode::config::Configuration;
+use sled::Db;
 use uuid::Uuid;
+
+pub struct Database {
+    pub(crate) database: Db,
+    pub(crate) config: Configuration,
+}
+
+impl Default for Database {
+    fn default() -> Self {
+        Self {
+            database: sled::open("/tmp/tors").unwrap(),
+            config: bincode::config::standard(),
+        }
+    }
+}
 
 impl App {
     pub(crate) fn get_task(&mut self) -> Result<Task> {
