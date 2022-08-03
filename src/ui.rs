@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use bincode::config::Configuration;
-use chrono::{Datelike, Timelike};
 use serde::{Deserialize, Serialize};
 use sled::Db;
 use tui::backend::Backend;
@@ -10,6 +9,7 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
+use uuid::Uuid;
 
 #[derive(Default)]
 pub(crate) struct StatefulList {
@@ -161,19 +161,9 @@ impl App {
     }
 
     pub(crate) fn add_to_db(&mut self) -> Result<()> {
-        let chr = chrono::Local::now();
+        let uuid = Uuid::new_v4().to_string();
 
-        let date = format!(
-            "{}-{:>02}-{:>02} {:>02}:{:>02}:{:>02}",
-            chr.year(),
-            chr.month(),
-            chr.day(),
-            chr.hour(),
-            chr.minute(),
-            chr.second()
-        );
-
-        self.insert(&date)?;
+        self.insert(&uuid)?;
 
         Ok(())
     }
