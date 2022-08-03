@@ -11,6 +11,6 @@ crossterm = "0.24.0"
 anyhow = "1.0.59"
 unicode-width = "0.1.9"
 sled = "0.34.7"
-serde = { version = "1.0.141", features = ["derive"] }
+serde = { version = "1.0.142", features = ["derive"] }
 bincode = { version = "2.0.0-rc.1", features = ["serde"] }
 chrono = "0.4.19"
