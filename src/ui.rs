@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use bincode::config::Configuration;
 use serde::{Deserialize, Serialize};
 use sled::Db;
@@ -9,7 +9,6 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
-use uuid::Uuid;
 
 #[derive(Default)]
 pub(crate) struct StatefulList {
@@ -47,9 +46,9 @@ impl StatefulList {
     }
 }
 
-struct Database {
-    database: Db,
-    config: Configuration,
+pub struct Database {
+    pub(crate) database: Db,
+    pub(crate) config: Configuration,
 }
 
 impl Default for Database {
@@ -63,7 +62,7 @@ impl Default for Database {
 
 #[derive(Default)]
 pub struct App {
-    database: Database,
+    pub(crate) database: Database,
     pub(crate) mode: WindowMode,
     pub(crate) tasks: StatefulList,
     pub(crate) task: Task,
@@ -115,32 +114,6 @@ impl App {
         }
     }
 
-    pub(crate) fn get_task(&mut self) -> Result<Task> {
-        // TODO
-        // Improve performance
-        // Copy data!
-        let (id, _) = self
-            .tasks
-            .items
-            .get(
-                self.tasks
-                    .state
-                    .selected()
-                    .with_context(|| "Failed get element")?,
-            )
-            .with_context(|| "Not found task!")?;
-
-        let ivec = self
-            .database
-            .database
-            .get(id)?
-            .with_context(|| "Not found in database")?;
-
-        let (task, _) = bincode::serde::decode_from_slice::<Task, _>(&ivec, self.database.config)?;
-
-        Ok(task)
-    }
-
     pub(crate) fn update_tasks(&mut self) -> Result<()> {
         self.tasks.items = self
             .database
@@ -156,62 +129,6 @@ impl App {
                 Ok((id, task))
             })
             .collect::<Result<Vec<(String, Task)>>>()?;
-
-        Ok(())
-    }
-
-    pub(crate) fn add_to_db(&mut self) -> Result<()> {
-        let uuid = Uuid::new_v4().to_string();
-
-        if self.check_db(&uuid).is_none() {
-            self.add_to_db()?;
-
-            return Ok(())
-        }
-
-        self.insert(&uuid)?;
-
-        Ok(())
-    }
-
-    pub(crate) fn rm_from_db(&mut self) -> Result<()> {
-        if let Some((id, _)) = &self.tasks.items.get(
-            self.tasks
-                .state
-                .selected()
-                .with_context(|| "Failed get element")?,
-        ) {
-            self.database.database.remove(id)?;
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn update_db(&mut self) -> Result<()> {
-        if let Some((id, _)) = &self
-            .tasks
-            .items
-            .get(self.tasks.state.selected().unwrap_or(0))
-        {
-            self.insert(&id.to_string())?;
-        }
-
-        Ok(())
-    }
-
-    pub fn check_db(&mut self, uuid: &str) -> Option<()> {
-        if let Ok(None) = self.database.database.get(uuid) {
-            return None
-        }
-
-        Some(())
-    }
-
-    fn insert(&mut self, date: &str) -> Result<()> {
-        self.database.database.insert(
-            date,
-            bincode::serde::encode_to_vec(self.task.clone(), self.database.config)?,
-        )?;
 
         Ok(())
     }

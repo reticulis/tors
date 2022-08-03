@@ -1,3 +1,4 @@
+mod database;
 mod keyboard;
 mod ui;
 

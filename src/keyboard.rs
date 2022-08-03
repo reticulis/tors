@@ -1,9 +1,9 @@
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use crate::ui::{EditMode, EditState, Task, WindowMode};
 use crate::App;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 use anyhow::Result;
 use unicode_width::UnicodeWidthStr;
