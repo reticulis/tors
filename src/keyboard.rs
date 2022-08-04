@@ -4,6 +4,7 @@ use crossterm::event;
 use crossterm::event::{Event, KeyCode};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use rayon::prelude::*;
 
 use anyhow::Result;
 use unicode_width::UnicodeWidthStr;
@@ -97,8 +98,8 @@ impl App {
 
         self.task = task;
 
-        self.cursor_pos_x = self.task.description.split('\n').last().unwrap().len() as u16;
-        self.cursor_pos_y = self.task.description.split('\n').count().saturating_sub(1) as u16;
+        self.cursor_pos_x = self.task.description.lines().last().unwrap().len() as u16;
+        self.cursor_pos_y = self.task.description.lines().count().saturating_sub(1) as u16;
 
         self.new_task = false;
         self.mode = WindowMode::Task(EditMode::View);

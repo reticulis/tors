@@ -10,6 +10,7 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
+use rayon::prelude::*;
 
 #[derive(Default)]
 pub(crate) struct StatefulList {
@@ -135,6 +136,7 @@ impl App {
             .database
             .database
             .iter()
+            .par_bridge()
             .filter_map(|d| {
                 let (id, task) = d.ok()?;
 
@@ -152,7 +154,7 @@ impl App {
             })
             .collect::<Vec<(String, Task)>>();
 
-        tasks.sort_by(|(_, time1), (_, time2)| time1.expire.date.cmp(&time2.expire.date));
+        tasks.par_sort_unstable_by(|(_, time1), (_, time2)| time1.expire.date.cmp(&time2.expire.date));
 
         self.tasks.items = tasks;
 
@@ -175,7 +177,7 @@ impl App {
         let tasks: Vec<ListItem> = self
             .tasks
             .items
-            .iter()
+            .par_iter()
             .map(|(_, t)| {
                 let (status, style) = if t.done {
                     ("✅ ".to_string(), Style::default().fg(Color::Green))
