@@ -1,4 +1,7 @@
+use crate::database::Database;
 use anyhow::Result;
+use chrono::serde::ts_seconds;
+use chrono::{DateTime, Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use tui::backend::Backend;
 use tui::layout::{Constraint, Layout};
@@ -7,7 +10,6 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
-use crate::database::Database;
 
 #[derive(Default)]
 pub(crate) struct StatefulList {
@@ -84,9 +86,37 @@ pub struct Task {
     pub(crate) description: String,
     pub(crate) done: bool,
     pub(crate) daily_repeat: bool,
-    pub(crate) expire: String,
+    pub(crate) expire: Date,
     // TODO
     // another parameters
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Date {
+    #[serde(with = "ts_seconds")]
+    date: DateTime<Utc>,
+}
+
+impl Default for Date {
+    fn default() -> Self {
+        let now = Utc::now();
+
+        let date = match now.with_day(now.day() + 1) {
+            Some(date) => date,
+            None => match now.with_month(now.month() + 1) {
+                Some(date) => date.with_day(1).unwrap(),
+                None => now
+                    .with_year(now.year() + 1)
+                    .unwrap()
+                    .with_month(1)
+                    .unwrap()
+                    .with_day(1)
+                    .unwrap(),
+            },
+        };
+
+        Self { date }
+    }
 }
 
 impl App {
@@ -101,20 +131,30 @@ impl App {
     }
 
     pub(crate) fn update_tasks(&mut self) -> Result<()> {
-        self.tasks.items = self
+        let mut tasks = self
             .database
             .database
             .iter()
-            .map(|v| {
-                let (id, task) = v?;
+            .filter_map(|d| {
+                let (id, task) = d.ok()?;
 
                 let (task, _) =
-                    bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)?;
-                let id = String::from_utf8_lossy(&id).parse::<String>()?;
+                    bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)
+                        .ok()?;
 
-                Ok((id, task))
+                if task.expire.date <= Utc::now() {
+                    return None;
+                }
+
+                let id = String::from_utf8(id.to_vec()).ok()?;
+
+                Some((id, task))
             })
-            .collect::<Result<Vec<(String, Task)>>>()?;
+            .collect::<Vec<(String, Task)>>();
+
+        tasks.sort_by(|(_, time1), (_, time2)| time1.expire.date.cmp(&time2.expire.date));
+
+        self.tasks.items = tasks;
 
         Ok(())
     }
