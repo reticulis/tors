@@ -49,7 +49,7 @@ impl App {
     pub(crate) fn add_to_db(&mut self) -> Result<()> {
         let uuid = Uuid::new_v4().to_string();
 
-        if self.check_db(&uuid).is_none() {
+        if self.check_db(&uuid).is_some() {
             self.add_to_db()?;
 
             return Ok(());
