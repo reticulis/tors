@@ -107,6 +107,10 @@ impl App {
     }
 
     fn save_task(&mut self) -> Result<()> {
+        if self.task.title.is_empty() {
+            return Ok(())
+        }
+        
         if self.new_task {
             self.add_to_db()?;
         } else {
