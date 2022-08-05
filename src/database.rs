@@ -20,19 +20,14 @@ impl Default for Database {
 }
 
 impl App {
-    pub(crate) fn get_task(&mut self) -> Result<Task> {
+    pub(crate) fn get_task(&mut self, id: usize) -> Result<Task> {
         // TODO
         // Improve performance
         // Copy data!
         let (id, _) = self
             .tasks
             .items
-            .get(
-                self.tasks
-                    .state
-                    .selected()
-                    .with_context(|| "Failed get element")?,
-            )
+            .get(id)
             .with_context(|| "Not found task!")?;
 
         let ivec = self

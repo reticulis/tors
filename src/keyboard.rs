@@ -4,7 +4,6 @@ use crossterm::event;
 use crossterm::event::{Event, KeyCode};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use rayon::prelude::*;
 
 use anyhow::Result;
 use unicode_width::UnicodeWidthStr;
@@ -66,15 +65,17 @@ impl App {
     }
 
     fn mark_task(&mut self) -> Result<()> {
-        let mut task = self.get_task()?;
-        task.done = !task.done;
+        if let Some(id) = self.tasks.state.selected() {
+            let mut task = self.get_task(id)?;
+            task.done = !task.done;
 
-        self.task = task;
+            self.task = task;
 
-        self.update_db()?;
-        self.update_tasks()?;
+            self.update_db()?;
+            self.update_tasks()?;
 
-        self.task = Task::default();
+            self.task = Task::default();
+        }
 
         Ok(())
     }
@@ -90,19 +91,17 @@ impl App {
     }
 
     fn edit_task(&mut self) -> Result<()> {
-        if self.tasks.state.selected() == None {
-            return Ok(());
+        if let Some(id) = self.tasks.state.selected() {
+            let task = self.get_task(id)?;
+
+            self.task = task;
+
+            self.cursor_pos_x = self.task.description.lines().last().unwrap().len() as u16;
+            self.cursor_pos_y = self.task.description.lines().count().saturating_sub(1) as u16;
+
+            self.new_task = false;
+            self.mode = WindowMode::Task(EditMode::View);
         }
-
-        let task = self.get_task()?;
-
-        self.task = task;
-
-        self.cursor_pos_x = self.task.description.lines().last().unwrap().len() as u16;
-        self.cursor_pos_y = self.task.description.lines().count().saturating_sub(1) as u16;
-
-        self.new_task = false;
-        self.mode = WindowMode::Task(EditMode::View);
 
         Ok(())
     }
