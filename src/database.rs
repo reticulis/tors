@@ -13,7 +13,7 @@ pub struct Database {
 impl Default for Database {
     fn default() -> Self {
         Self {
-            database: sled::open("/tmp/tors").unwrap(),
+            database: sled::open(dirs::home_dir().unwrap().join(".tors")).unwrap(),
             config: bincode::config::standard(),
         }
     }
