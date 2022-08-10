@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 tui = "0.18.0"
-crossterm = "0.24.0"
+crossterm = "0.25.0"
 anyhow = "1.0.60"
 unicode-width = "0.1.9"
 sled = "0.34.7"
