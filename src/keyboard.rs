@@ -5,9 +5,9 @@ use crossterm::event::{Event, KeyCode};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+use crate::ui::Preferences::{Expire, Repeat};
 use anyhow::Result;
 use unicode_width::UnicodeWidthStr;
-use crate::ui::Preferences::{Expire, Repeat};
 
 #[derive(Debug)]
 pub struct ExitApp;
@@ -50,7 +50,7 @@ impl App {
                 },
                 WindowMode::Task(EditMode::Edit(EditState::Title)) => match key.code {
                     KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
-                    KeyCode::Char(n) => self.title_input(n),
+                    KeyCode::Char(c) => input(&mut self.task.title, self.width, c),
                     KeyCode::Backspace => {
                         self.task.title.pop();
                     }
@@ -63,25 +63,21 @@ impl App {
                     KeyCode::Backspace => self.description_bs(),
                     _ => {}
                 },
-                WindowMode::Preferences(false) => {
-                    match key.code {
-                        KeyCode::Char('e') => self.preferences_edit(),
-                        KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
-                        KeyCode::Up => self.preferences.previous(),
-                        KeyCode::Down => self.preferences.next(),
-                        _ => {}
+                WindowMode::Preferences(false) => match key.code {
+                    KeyCode::Char('e') => self.preferences_edit(),
+                    KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
+                    KeyCode::Up => self.preferences.previous(),
+                    KeyCode::Down => self.preferences.next(),
+                    _ => {}
+                },
+                WindowMode::Preferences(true) => match key.code {
+                    KeyCode::Esc => self.back_to_pref(),
+                    KeyCode::Char(c) => input(&mut self.preferences_input, self.width, c),
+                    KeyCode::Backspace => {
+                        self.preferences_input.pop();
                     }
-                }
-                WindowMode::Preferences(true) => {
-                    match key.code {
-                        KeyCode::Esc => self.mode = WindowMode::Preferences(false),
-                        KeyCode::Char(c) => self.preferences_input.push(c),
-                        KeyCode::Backspace => {
-                            self.preferences_input.pop();
-                        },
-                        _ => {}
-                    }
-                }
+                    _ => {}
+                },
             }
         }
         Ok(())
@@ -131,9 +127,9 @@ impl App {
 
     fn save_task(&mut self) -> Result<()> {
         if self.task.title.is_empty() {
-            return Ok(())
+            return Ok(());
         }
-        
+
         if self.new_task {
             self.add_to_db()?;
         } else {
@@ -151,12 +147,9 @@ impl App {
         self.mode = WindowMode::List;
     }
 
-    fn title_input(&mut self, n: char) {
-        if self.task.title.width() as u16 == self.width.saturating_sub(3) {
-            return;
-        }
-
-        self.task.title.push(n);
+    fn back_to_pref(&mut self) {
+        self.mode = WindowMode::Preferences(false);
+        self.preferences_input.clear();
     }
 
     fn description_input(&mut self, n: char) {
@@ -191,4 +184,12 @@ impl App {
             }
         }
     }
+}
+
+fn input(input: &mut String, width: u16, n: char) {
+    if input.width() as u16 == width.saturating_sub(3) {
+        return;
+    }
+
+    input.push(n);
 }

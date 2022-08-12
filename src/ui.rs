@@ -1,7 +1,9 @@
 use crate::database::Database;
+use crate::ui::Preferences::{Expire, Repeat};
 use anyhow::Result;
 use chrono::serde::ts_seconds;
 use chrono::{DateTime, Datelike, Utc};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tui::backend::Backend;
 use tui::layout::{Constraint, Layout};
@@ -10,8 +12,6 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
-use rayon::prelude::*;
-use crate::ui::Preferences::{Expire, Repeat};
 
 #[derive(Default)]
 pub(crate) struct StatefulList<T> {
@@ -133,7 +133,7 @@ impl Preferences {
         match self {
             Repeat(b) => b.to_string(),
             Expire(e) => e.to_string(),
-            _ => "".to_string()
+            _ => "".to_string(),
         }
     }
 }
@@ -172,7 +172,9 @@ impl App {
             })
             .collect::<Vec<(String, Task)>>();
 
-        tasks.par_sort_unstable_by(|(_, time1), (_, time2)| time1.expire.date.cmp(&time2.expire.date));
+        tasks.par_sort_unstable_by(|(_, time1), (_, time2)| {
+            time1.expire.date.cmp(&time2.expire.date)
+        });
 
         self.tasks.items = tasks;
 
@@ -273,29 +275,57 @@ impl App {
         f.render_widget(task_block, layout[1]);
     }
 
-    fn preferences_window<B: Backend>(&mut self, f: &mut Frame<B>){
+    fn preferences_window<B: Backend>(&mut self, f: &mut Frame<B>) {
         let layout = Layout::default()
             .margin(2)
-            .constraints([Constraint::Percentage(100)])
+            .constraints([Constraint::Percentage(90), Constraint::Percentage(10)])
             .split(f.size());
+
+        self.width = layout[0].width;
 
         self.preferences.items = vec![
             ("Repeat".to_string(), Repeat(self.task.daily_repeat)),
-            ("Expire".to_string(), Expire(self.task.expire.date.format("%Y/%m/%d %H:%M").to_string()))
+            (
+                "Expire".to_string(),
+                Expire(self.task.expire.date.format("%Y/%m/%d %H:%M").to_string()),
+            ),
         ];
 
-        let options: Vec<ListItem> = self.preferences.items.par_iter().map(|(title, pref)| {
-            let raw = format!("{title}: {}", pref.value());
-            ListItem::new(vec![Spans::from(Span::raw(raw))])
-        }).collect();
+        let options: Vec<ListItem> = self
+            .preferences
+            .items
+            .par_iter()
+            .map(|(title, pref)| {
+                let raw = format!("{title}: {}", pref.value());
+                ListItem::new(vec![Spans::from(Span::raw(raw))])
+            })
+            .collect();
 
-        let options = List::new(options)
-            .highlight_style(
-                Style::default()
-                    .bg(Color::LightBlue)
-                    .add_modifier(Modifier::BOLD),
+        let options = List::new(options).highlight_style(
+            Style::default()
+                .bg(Color::LightBlue)
+                .add_modifier(Modifier::BOLD),
+        );
+
+        let input = Paragraph::new(self.preferences_input.as_ref())
+            .block(
+                Block::default()
+                    .title(" Edit ")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
             );
 
-        f.render_stateful_widget(options, layout[0], &mut self.preferences.state)
+        match self.mode {
+            WindowMode::Preferences(true) => {
+                f.set_cursor(
+                    layout[1].x + self.preferences_input.width() as u16 + 1,
+                    layout[1].y + 1,
+                )
+            }
+            _ => {}
+        }
+
+        f.render_stateful_widget(options, layout[0], &mut self.preferences.state);
+        f.render_widget(input, layout[1]);
     }
 }
