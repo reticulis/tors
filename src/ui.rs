@@ -55,6 +55,7 @@ pub struct App {
     pub(crate) mode: WindowMode,
     pub(crate) tasks: StatefulList<(String, Task)>,
     pub(crate) preferences: StatefulList<(String, Preferences)>,
+    pub(crate) preferences_input: String,
     pub(crate) task: Task,
     pub(crate) new_task: bool,
     pub(crate) cursor_pos_x: u16,
@@ -67,7 +68,7 @@ pub enum WindowMode {
     #[default]
     List,
     Task(EditMode),
-    Preferences,
+    Preferences(bool),
 }
 
 pub enum EditMode {
@@ -182,7 +183,7 @@ impl App {
         match self.mode {
             WindowMode::List => self.tasks_window(f),
             WindowMode::Task(_) => self.view_window(f),
-            WindowMode::Preferences => self.preferences_window(f),
+            WindowMode::Preferences(_) => self.preferences_window(f),
         }
     }
 

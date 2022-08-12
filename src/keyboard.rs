@@ -1,4 +1,4 @@
-use crate::ui::{EditMode, EditState, Task, WindowMode};
+use crate::ui::{EditMode, EditState, Preferences, Task, WindowMode};
 use crate::App;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
@@ -7,6 +7,7 @@ use std::fmt::{Display, Formatter};
 
 use anyhow::Result;
 use unicode_width::UnicodeWidthStr;
+use crate::ui::Preferences::{Expire, Repeat};
 
 #[derive(Debug)]
 pub struct ExitApp;
@@ -27,10 +28,6 @@ impl App {
                     KeyCode::Char(' ') => self.mark_task()?,
                     KeyCode::Char('n') => self.new_task(),
                     KeyCode::Char('d') => self.delete_task()?,
-                    // For debug only
-                    KeyCode::Char('t') => {
-                        self.mode = WindowMode::Preferences;
-                    }
                     KeyCode::Down => self.tasks.next(),
                     KeyCode::Up => self.tasks.previous(),
                     KeyCode::Enter => self.edit_task()?,
@@ -47,7 +44,7 @@ impl App {
                     }
                     KeyCode::Char('s') => self.save_task()?,
                     KeyCode::Char('p') => {
-                        self.mode = WindowMode::Preferences;
+                        self.mode = WindowMode::Preferences(false);
                     }
                     _ => {}
                 },
@@ -66,11 +63,22 @@ impl App {
                     KeyCode::Backspace => self.description_bs(),
                     _ => {}
                 },
-                WindowMode::Preferences => {
+                WindowMode::Preferences(false) => {
                     match key.code {
-                        KeyCode::Esc => return Err(ExitApp)?,
+                        KeyCode::Char('e') => self.preferences_edit(),
+                        KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
                         KeyCode::Up => self.preferences.previous(),
                         KeyCode::Down => self.preferences.next(),
+                        _ => {}
+                    }
+                }
+                WindowMode::Preferences(true) => {
+                    match key.code {
+                        KeyCode::Esc => self.mode = WindowMode::Preferences(false),
+                        KeyCode::Char(c) => self.preferences_input.push(c),
+                        KeyCode::Backspace => {
+                            self.preferences_input.pop();
+                        },
                         _ => {}
                     }
                 }
@@ -171,6 +179,16 @@ impl App {
         if self.cursor_pos_x == 0 {
             self.cursor_pos_y = self.cursor_pos_y.saturating_sub(1);
             self.task.description.pop();
+        }
+    }
+
+    fn preferences_edit(&mut self) {
+        if let Some(i) = self.preferences.state.selected() {
+            match self.preferences.items[i] {
+                (_, Repeat(b)) => self.task.daily_repeat = !b,
+                (_, Expire(_)) => self.mode = WindowMode::Preferences(true),
+                _ => {}
+            }
         }
     }
 }
