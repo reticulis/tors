@@ -27,6 +27,10 @@ impl App {
                     KeyCode::Char(' ') => self.mark_task()?,
                     KeyCode::Char('n') => self.new_task(),
                     KeyCode::Char('d') => self.delete_task()?,
+                    // For debug only
+                    KeyCode::Char('t') => {
+                        self.mode = WindowMode::Preferences;
+                    }
                     KeyCode::Down => self.tasks.next(),
                     KeyCode::Up => self.tasks.previous(),
                     KeyCode::Enter => self.edit_task()?,
@@ -42,6 +46,9 @@ impl App {
                         self.mode = WindowMode::Task(EditMode::Edit(EditState::Task))
                     }
                     KeyCode::Char('s') => self.save_task()?,
+                    KeyCode::Char('p') => {
+                        self.mode = WindowMode::Preferences;
+                    }
                     _ => {}
                 },
                 WindowMode::Task(EditMode::Edit(EditState::Title)) => match key.code {
@@ -59,6 +66,14 @@ impl App {
                     KeyCode::Backspace => self.description_bs(),
                     _ => {}
                 },
+                WindowMode::Preferences => {
+                    match key.code {
+                        KeyCode::Esc => return Err(ExitApp)?,
+                        KeyCode::Up => self.preferences.previous(),
+                        KeyCode::Down => self.preferences.next(),
+                        _ => {}
+                    }
+                }
             }
         }
         Ok(())

@@ -44,7 +44,7 @@ impl App {
     pub(crate) fn add_to_db(&mut self) -> Result<()> {
         let uuid = Uuid::new_v4().to_string();
 
-        if self.check_db(&uuid).is_some() {
+        if self.contains_uuid(&uuid).is_some() {
             self.add_to_db()?;
 
             return Ok(());
@@ -80,7 +80,7 @@ impl App {
         Ok(())
     }
 
-    pub fn check_db(&mut self, uuid: &str) -> Option<()> {
+    pub fn contains_uuid(&mut self, uuid: &str) -> Option<()> {
         if let Ok(None) = self.database.database.get(uuid) {
             return None;
         }
