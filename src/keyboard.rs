@@ -1,4 +1,4 @@
-use crate::ui::{EditMode, EditState, Preferences, Task, WindowMode};
+use crate::ui::{Date, EditMode, EditState, Task, WindowMode};
 use crate::App;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
@@ -65,7 +65,7 @@ impl App {
                 },
                 WindowMode::Preferences(false) => match key.code {
                     KeyCode::Char('e') => self.preferences_edit(),
-                    KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
+                    KeyCode::Esc => self.back_to_task(),
                     KeyCode::Up => self.preferences.previous(),
                     KeyCode::Down => self.preferences.next(),
                     _ => {}
@@ -76,6 +76,7 @@ impl App {
                     KeyCode::Backspace => {
                         self.preferences_input.pop();
                     }
+                    KeyCode::Enter => self.edit_pref_value(),
                     _ => {}
                 },
             }
@@ -147,6 +148,11 @@ impl App {
         self.mode = WindowMode::List;
     }
 
+    fn back_to_task(&mut self) {
+        self.preferences_input.clear();
+        self.mode = WindowMode::Task(EditMode::View);
+    }
+
     fn back_to_pref(&mut self) {
         self.mode = WindowMode::Preferences(false);
         self.preferences_input.clear();
@@ -183,6 +189,27 @@ impl App {
                 _ => {}
             }
         }
+    }
+
+    fn edit_pref_value(&mut self) {
+        let i = self.preferences.state.selected().unwrap();
+
+        let (_, pref) = self.preferences.items.get_mut(i).unwrap();
+
+        match pref {
+            Expire(_) => {
+                if let Ok(date) =
+                    chrono::NaiveDateTime::parse_from_str(&self.preferences_input, "%Y-%m-%d %H:%M")
+                {
+                    self.task.expire = Date { date };
+                } else {
+                    return;
+                }
+            }
+            _ => {}
+        }
+
+        self.back_to_pref()
     }
 }
 

@@ -1,8 +1,7 @@
 use crate::database::Database;
 use crate::ui::Preferences::{Expire, Repeat};
 use anyhow::Result;
-use chrono::serde::ts_seconds;
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{Datelike, Local, NaiveDateTime};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tui::backend::Backend;
@@ -94,13 +93,13 @@ pub struct Task {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Date {
-    #[serde(with = "ts_seconds")]
-    date: DateTime<Utc>,
+    // #[serde(with = "ts_seconds")]
+    pub(crate) date: NaiveDateTime,
 }
 
 impl Default for Date {
     fn default() -> Self {
-        let now = Utc::now();
+        let now = Local::now().naive_local();
 
         let date = match now.with_day(now.day() + 1) {
             Some(date) => date,
@@ -162,7 +161,7 @@ impl App {
                     bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)
                         .ok()?;
 
-                if task.expire.date <= Utc::now() {
+                if task.expire.date <= Local::now().naive_local() {
                     return None;
                 }
 
@@ -287,7 +286,7 @@ impl App {
             ("Repeat".to_string(), Repeat(self.task.daily_repeat)),
             (
                 "Expire".to_string(),
-                Expire(self.task.expire.date.format("%Y/%m/%d %H:%M").to_string()),
+                Expire(self.task.expire.date.format("%Y-%m-%d %H:%M").to_string()),
             ),
         ];
 
@@ -307,21 +306,18 @@ impl App {
                 .add_modifier(Modifier::BOLD),
         );
 
-        let input = Paragraph::new(self.preferences_input.as_ref())
-            .block(
-                Block::default()
-                    .title(" Edit ")
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded),
-            );
+        let input = Paragraph::new(self.preferences_input.as_ref()).block(
+            Block::default()
+                .title(" Edit ")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
 
         match self.mode {
-            WindowMode::Preferences(true) => {
-                f.set_cursor(
-                    layout[1].x + self.preferences_input.width() as u16 + 1,
-                    layout[1].y + 1,
-                )
-            }
+            WindowMode::Preferences(true) => f.set_cursor(
+                layout[1].x + self.preferences_input.width() as u16 + 1,
+                layout[1].y + 1,
+            ),
             _ => {}
         }
 
