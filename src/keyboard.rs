@@ -1,4 +1,4 @@
-use crate::ui::{EditMode, EditState, Task, WindowMode};
+use crate::ui::{EditMode, EditState,Task, WindowMode};
 use crate::App;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
@@ -103,6 +103,7 @@ impl App {
     fn new_task(&mut self) -> Result<()> {
         let task = Task {
             title: "New task".to_string(),
+            creation_date: chrono::Local::now().naive_local(),
             ..Default::default()
         };
         self.database.add(&task)?;

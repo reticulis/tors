@@ -86,6 +86,7 @@ pub struct Task {
     pub(crate) title: String,
     pub(crate) description: String,
     pub(crate) done: bool,
+    pub(crate) creation_date: NaiveDateTime,
     pub(crate) preferences: Preferences,
 }
 
@@ -161,10 +162,8 @@ impl App {
             let time2 = time2.borrow();
 
             time1
-                .preferences
-                .expire
-                .date
-                .cmp(&time2.preferences.expire.date)
+                .creation_date
+                .cmp(&time2.creation_date)
         });
 
         self.tasks.items = tasks;
