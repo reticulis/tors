@@ -1,9 +1,8 @@
-use crate::ui::Task;
-use crate::App;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use bincode::config::Configuration;
-use sled::Db;
-use uuid::Uuid;
+use nanoid::nanoid;
+use serde::Serialize;
+use sled::{Db, Iter};
 
 pub struct Database {
     pub(crate) database: Db,
@@ -19,78 +18,33 @@ impl Default for Database {
     }
 }
 
-impl App {
-    pub(crate) fn get_task(&mut self, id: usize) -> Result<Task> {
-        let (id, _) = self
-            .tasks
-            .items
-            .get(id)
-            .with_context(|| "Not found task!")?;
+impl Database {
+    pub(crate) fn add<T: Serialize>(&self, value: &T) -> Result<()> {
+        let nanoid = nanoid!();
 
-        let ivec = self
-            .database
-            .database
-            .get(id)?
-            .with_context(|| "Not found in database")?;
-
-        let (task, _) = bincode::serde::decode_from_slice::<Task, _>(&ivec, self.database.config)?;
-
-        Ok(task)
-    }
-
-    pub(crate) fn add_to_db(&mut self) -> Result<()> {
-        let uuid = Uuid::new_v4().to_string();
-
-        if self.contains_uuid(&uuid).is_some() {
-            self.add_to_db()?;
-
-            return Ok(());
-        }
-
-        self.insert(&uuid)?;
+        self.insert(nanoid, value)?;
 
         Ok(())
     }
 
-    pub(crate) fn rm_from_db(&mut self) -> Result<()> {
-        if let Some((id, _)) = &self.tasks.items.get(
-            self.tasks
-                .state
-                .selected()
-                .with_context(|| "Failed get element")?,
-        ) {
-            self.database.database.remove(id)?;
-        }
+    pub(crate) fn insert<K: AsRef<[u8]>, T: Serialize>(&self, key: K, value: &T) -> Result<()> {
+        self.database
+            .insert(key, bincode::serde::encode_to_vec(value, self.config)?)?;
 
         Ok(())
     }
 
-    pub(crate) fn update_db(&mut self) -> Result<()> {
-        if let Some((id, _)) = &self
-            .tasks
-            .items
-            .get(self.tasks.state.selected().unwrap_or(0))
-        {
-            self.insert(&id.to_string())?;
-        }
+    pub(crate) fn remove<K: AsRef<[u8]>>(&self, key: K) -> Result<()> {
+        self.database.remove(key)?;
 
         Ok(())
     }
 
-    pub fn contains_uuid(&mut self, uuid: &str) -> Option<()> {
-        if let Ok(None) = self.database.database.get(uuid) {
-            return None;
-        }
+    // pub(crate) fn contains<K: AsRef<[u8]>>(&mut self, key: K) -> bool {
+    //     self.database.contains_key(key).unwrap_or(false)
+    // }
 
-        Some(())
-    }
-
-    fn insert(&mut self, date: &str) -> Result<()> {
-        self.database.database.insert(
-            date,
-            bincode::serde::encode_to_vec(self.task.clone(), self.database.config)?,
-        )?;
-
-        Ok(())
+    pub(crate) fn iter(&self) -> Iter {
+        self.database.iter()
     }
 }
