@@ -1,11 +1,9 @@
-use crate::ui::{Date, EditMode, EditState, Task, WindowMode};
+use crate::ui::{EditMode, EditState, Task, WindowMode};
 use crate::App;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-
-use crate::ui::Preferences::{Expire, Repeat};
 use anyhow::Result;
 use unicode_width::UnicodeWidthStr;
 
@@ -26,7 +24,7 @@ impl App {
             match self.mode {
                 WindowMode::List => match key.code {
                     KeyCode::Char(' ') => self.mark_task()?,
-                    KeyCode::Char('n') => self.new_task(),
+                    KeyCode::Char('n') => self.new_task()?,
                     KeyCode::Char('d') => self.delete_task()?,
                     KeyCode::Down => self.tasks.next(),
                     KeyCode::Up => self.tasks.previous(),
@@ -48,13 +46,18 @@ impl App {
                     }
                     _ => {}
                 },
-                WindowMode::Task(EditMode::Edit(EditState::Title)) => match key.code {
-                    KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
-                    KeyCode::Char(c) => input(&mut self.task.title, self.width, c),
-                    KeyCode::Backspace => {
-                        self.task.title.pop();
+                WindowMode::Task(EditMode::Edit(EditState::Title)) => {
+                    let (_, task) = self.task().unwrap();
+                    let task = &mut *task.borrow_mut();
+
+                    match key.code {
+                        KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
+                        KeyCode::Char(c) => input(&mut task.title, self.width, c),
+                        KeyCode::Backspace => {
+                            task.title.pop();
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 },
                 WindowMode::Task(EditMode::Edit(EditState::Task)) => match key.code {
                     KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
@@ -64,7 +67,7 @@ impl App {
                     _ => {}
                 },
                 WindowMode::Preferences(false) => match key.code {
-                    KeyCode::Char('e') => self.preferences_edit(),
+                    KeyCode::Char('e') => self.preferences_edit()?,
                     KeyCode::Esc => self.back_to_task(),
                     KeyCode::Up => self.preferences.previous(),
                     KeyCode::Down => self.preferences.next(),
@@ -76,7 +79,7 @@ impl App {
                     KeyCode::Backspace => {
                         self.preferences_input.pop();
                     }
-                    KeyCode::Enter => self.edit_pref_value(),
+                    KeyCode::Enter => self.preferences_edit()?,
                     _ => {}
                 },
             }
@@ -85,41 +88,45 @@ impl App {
     }
 
     fn mark_task(&mut self) -> Result<()> {
-        if let Some(id) = self.tasks.state.selected() {
-            let mut task = self.get_task(id)?;
+        if let Some((id, task)) = self.task() {
+            let task = &mut *task.borrow_mut();
+
             task.done = !task.done;
 
-            self.task = task;
-
-            self.update_db()?;
+            self.database.insert(id, task)?;
             self.update_tasks()?;
-
-            self.task = Task::default();
         }
 
         Ok(())
     }
 
-    fn new_task(&mut self) {
-        self.new_task = true;
-        self.mode = WindowMode::Task(EditMode::Edit(EditState::Title));
+    fn new_task(&mut self) -> Result<()> {
+        let task = Task {
+            title: "New task".to_string(),
+            ..Default::default()
+        };
+        self.database.add(&task)?;
+        self.update_tasks()?;
+
+        Ok(())
     }
 
     fn delete_task(&mut self) -> Result<()> {
-        self.rm_from_db()?;
-        self.update_tasks()
+        if let Some((id, _)) = self.task() {
+            self.database.remove(id)?;
+            self.update_tasks()?;
+        }
+
+        Ok(())
     }
 
     fn edit_task(&mut self) -> Result<()> {
-        if let Some(id) = self.tasks.state.selected() {
-            let task = self.get_task(id)?;
+        if let Some((_, task)) = self.task() {
+            let task = &mut *task.borrow_mut();
 
-            self.task = task;
+            self.cursor_pos_x = task.description.lines().last().unwrap_or_default().len() as u16;
+            self.cursor_pos_y = task.description.lines().count().saturating_sub(1) as u16;
 
-            self.cursor_pos_x = self.task.description.split('\n').last().unwrap().len() as u16;
-            self.cursor_pos_y = self.task.description.split('\n').count().saturating_sub(1) as u16;
-
-            self.new_task = false;
             self.mode = WindowMode::Task(EditMode::View);
         }
 
@@ -127,14 +134,13 @@ impl App {
     }
 
     fn save_task(&mut self) -> Result<()> {
-        if self.task.title.is_empty() {
-            return Ok(());
-        }
+        let (id, task) = self.task().unwrap();
+        let task = &mut *task.borrow_mut();
 
-        if self.new_task {
-            self.add_to_db()?;
+        if task.title.is_empty() {
+            return Ok(());
         } else {
-            self.update_db()?;
+            self.database.insert(id, task)?;
         }
 
         self.update_tasks()?;
@@ -144,7 +150,6 @@ impl App {
     }
 
     fn back_to_list(&mut self) {
-        self.task = Task::default();
         self.mode = WindowMode::List;
     }
 
@@ -159,57 +164,61 @@ impl App {
     }
 
     fn description_input(&mut self, n: char) {
-        self.task.description.push(n);
+        let (_, task) = self.task().unwrap();
+        let task = &mut *task.borrow_mut();
+
+        task.description.push(n);
 
         if self.cursor_pos_x as u16 == self.width.saturating_sub(3) {
-            self.task.description.push('\n');
+            task.description.push('\n');
             self.cursor_pos_y += 1;
         }
     }
 
     fn description_enter(&mut self) {
-        self.task.description.push('\n');
+        let (_, task) = self.task().unwrap();
+        let task = &mut *task.borrow_mut();
+
+        task.description.push('\n');
         self.cursor_pos_y += 1;
     }
 
     fn description_bs(&mut self) {
-        self.task.description.pop();
+        let (_, task) = self.task().unwrap();
+        let task = &mut *task.borrow_mut();
+
+        task.description.pop();
 
         if self.cursor_pos_x == 0 {
             self.cursor_pos_y = self.cursor_pos_y.saturating_sub(1);
-            self.task.description.pop();
+            task.description.pop();
         }
     }
 
-    fn preferences_edit(&mut self) {
+    fn preferences_edit(&mut self) -> Result<()> {
+        let (_, task) = self.task().unwrap();
+
+        let task = &mut *task.borrow_mut();
+
         if let Some(i) = self.preferences.state.selected() {
-            match self.preferences.items[i] {
-                (_, Repeat(b)) => self.task.daily_repeat = !b,
-                (_, Expire(_)) => self.mode = WindowMode::Preferences(true),
+            match i {
+                0 => task.preferences.daily_repeat = !task.preferences.daily_repeat,
+                1 => {
+                    if self.mode == WindowMode::Preferences(false) {
+                        self.mode = WindowMode::Preferences(true);
+                    } else if let Ok(date) = chrono::NaiveDateTime::parse_from_str(
+                        &self.preferences_input,
+                        "%Y-%m-%d %H:%M:%S",
+                    ) {
+                        task.preferences.expire.date = date;
+                        self.back_to_pref();
+                    }
+                }
                 _ => {}
             }
         }
-    }
 
-    fn edit_pref_value(&mut self) {
-        let i = self.preferences.state.selected().unwrap();
-
-        let (_, pref) = self.preferences.items.get_mut(i).unwrap();
-
-        match pref {
-            Expire(_) => {
-                if let Ok(date) =
-                    chrono::NaiveDateTime::parse_from_str(&self.preferences_input, "%Y-%m-%d %H:%M")
-                {
-                    self.task.expire = Date { date };
-                } else {
-                    return;
-                }
-            }
-            _ => {}
-        }
-
-        self.back_to_pref()
+        Ok(())
     }
 }
 

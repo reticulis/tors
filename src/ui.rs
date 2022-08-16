@@ -1,9 +1,9 @@
 use crate::database::Database;
-use crate::ui::Preferences::{Expire, Repeat};
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDateTime};
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
+use std::rc::Rc;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Layout};
 use tui::style::{Color, Modifier, Style};
@@ -11,6 +11,7 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
+use rayon::prelude::*;
 
 #[derive(Default)]
 pub(crate) struct StatefulList<T> {
@@ -52,17 +53,15 @@ impl<T> StatefulList<T> {
 pub struct App {
     pub(crate) database: Database,
     pub(crate) mode: WindowMode,
-    pub(crate) tasks: StatefulList<(String, Task)>,
-    pub(crate) preferences: StatefulList<(String, Preferences)>,
+    pub(crate) tasks: StatefulList<(String, Rc<RefCell<Task>>)>,
+    pub(crate) preferences: StatefulList<String>,
     pub(crate) preferences_input: String,
-    pub(crate) task: Task,
-    pub(crate) new_task: bool,
     pub(crate) cursor_pos_x: u16,
     pub(crate) cursor_pos_y: u16,
     pub(crate) width: u16,
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 pub enum WindowMode {
     #[default]
     List,
@@ -70,30 +69,36 @@ pub enum WindowMode {
     Preferences(bool),
 }
 
+#[derive(PartialEq, Eq)]
 pub enum EditMode {
     View,
     Edit(EditState),
 }
 
+#[derive(PartialEq, Eq)]
 pub enum EditState {
     Title,
     Task,
 }
 
-#[derive(Clone, Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Task {
     pub(crate) title: String,
     pub(crate) description: String,
     pub(crate) done: bool,
+    pub(crate) preferences: Preferences,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct Preferences {
     pub(crate) daily_repeat: bool,
     pub(crate) expire: Date,
     // TODO
-    // another parameters
+    // Another parameters
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Date {
-    // #[serde(with = "ts_seconds")]
     pub(crate) date: NaiveDateTime,
 }
 
@@ -119,24 +124,6 @@ impl Default for Date {
     }
 }
 
-#[derive(Default)]
-pub enum Preferences {
-    #[default]
-    Default,
-    Repeat(bool),
-    Expire(String),
-}
-
-impl Preferences {
-    fn value(&self) -> String {
-        match self {
-            Repeat(b) => b.to_string(),
-            Expire(e) => e.to_string(),
-            _ => "".to_string(),
-        }
-    }
-}
-
 impl App {
     pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         self.update_tasks()?;
@@ -151,33 +138,44 @@ impl App {
     pub(crate) fn update_tasks(&mut self) -> Result<()> {
         let mut tasks = self
             .database
-            .database
             .iter()
-            .par_bridge()
-            .filter_map(|d| {
-                let (id, task) = d.ok()?;
+            .filter_map(|v| {
+                let (id, task) = v.ok()?;
+
+                let id = String::from_utf8_lossy(&id).to_string();
 
                 let (task, _) =
                     bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)
                         .ok()?;
 
-                if task.expire.date <= Local::now().naive_local() {
+                if task.preferences.expire.date <= Local::now().naive_local() {
                     return None;
                 }
 
-                let id = String::from_utf8(id.to_vec()).ok()?;
-
-                Some((id, task))
+                Some((id, Rc::new(RefCell::new(task))))
             })
-            .collect::<Vec<(String, Task)>>();
+            .collect::<Vec<(String, Rc<RefCell<Task>>)>>();
 
-        tasks.par_sort_unstable_by(|(_, time1), (_, time2)| {
-            time1.expire.date.cmp(&time2.expire.date)
+        tasks.sort_unstable_by(|(_, time1), (_, time2)| {
+            let time1 = time1.borrow();
+            let time2 = time2.borrow();
+
+            time1
+                .preferences
+                .expire
+                .date
+                .cmp(&time2.preferences.expire.date)
         });
 
         self.tasks.items = tasks;
 
         Ok(())
+    }
+
+    pub(crate) fn task(&self) -> Option<(&String, Rc<RefCell<Task>>)> {
+        let (id, task) = self.tasks.items.get(self.tasks.state.selected()?)?;
+
+        Some((id, task.clone()))
     }
 
     fn ui<B: Backend>(&mut self, f: &mut Frame<B>) {
@@ -197,8 +195,10 @@ impl App {
         let tasks: Vec<ListItem> = self
             .tasks
             .items
-            .par_iter()
+            .iter()
             .map(|(_, t)| {
+                let t = t.clone();
+                let t = &mut *t.borrow_mut();
                 let (status, style) = if t.done {
                     ("✅ ".to_string(), Style::default().fg(Color::Green))
                 } else {
@@ -221,7 +221,10 @@ impl App {
     }
 
     fn view_window<B: Backend>(&mut self, f: &mut Frame<B>) {
-        self.cursor_pos_x = self.task.description.split('\n').last().unwrap().width() as u16;
+        let (_, task) = self.task().unwrap();
+        let task = &mut *task.borrow_mut();
+
+        self.cursor_pos_x = task.description.split('\n').last().unwrap().width() as u16;
 
         let layout = Layout::default()
             .margin(2)
@@ -230,7 +233,7 @@ impl App {
 
         self.width = layout[1].width;
 
-        let title_block = Paragraph::new(self.task.title.as_ref())
+        let title_block = Paragraph::new(task.title.as_ref())
             .style(match self.mode {
                 WindowMode::Task(EditMode::Edit(EditState::Title)) => {
                     Style::default().fg(Color::Cyan)
@@ -245,10 +248,9 @@ impl App {
             );
 
         match self.mode {
-            WindowMode::Task(EditMode::Edit(EditState::Title)) => f.set_cursor(
-                layout[0].x + self.task.title.width() as u16 + 1,
-                layout[0].y + 1,
-            ),
+            WindowMode::Task(EditMode::Edit(EditState::Title)) => {
+                f.set_cursor(layout[0].x + task.title.width() as u16 + 1, layout[0].y + 1)
+            }
             WindowMode::Task(EditMode::Edit(EditState::Task)) => f.set_cursor(
                 layout[1].x + self.cursor_pos_x + 1,
                 layout[1].y + self.cursor_pos_y + 1,
@@ -256,7 +258,7 @@ impl App {
             _ => {}
         }
 
-        let task_block = Paragraph::new(self.task.description.as_ref())
+        let task_block = Paragraph::new(task.description.as_ref())
             .style(match self.mode {
                 WindowMode::Task(EditMode::Edit(EditState::Task)) => {
                     Style::default().fg(Color::Green)
@@ -282,11 +284,18 @@ impl App {
 
         self.width = layout[0].width;
 
+        let (_, task) = self.task().unwrap();
+        let task = &mut *task.borrow_mut();
+
         self.preferences.items = vec![
-            ("Repeat".to_string(), Repeat(self.task.daily_repeat)),
-            (
-                "Expire".to_string(),
-                Expire(self.task.expire.date.format("%Y-%m-%d %H:%M").to_string()),
+            format!("Repeat: {}", task.preferences.daily_repeat),
+            format!(
+                "Expire: {}",
+                task
+                    .preferences
+                    .expire
+                    .date
+                    .format("%Y-%m-%d %H:%M:%S")
             ),
         ];
 
@@ -294,10 +303,7 @@ impl App {
             .preferences
             .items
             .par_iter()
-            .map(|(title, pref)| {
-                let raw = format!("{title}: {}", pref.value());
-                ListItem::new(vec![Spans::from(Span::raw(raw))])
-            })
+            .map(|f| ListItem::new(vec![Spans::from(Span::raw(f))]))
             .collect();
 
         let options = List::new(options).highlight_style(
@@ -313,12 +319,11 @@ impl App {
                 .border_type(BorderType::Rounded),
         );
 
-        match self.mode {
-            WindowMode::Preferences(true) => f.set_cursor(
+        if let WindowMode::Preferences(true) = self.mode {
+            f.set_cursor(
                 layout[1].x + self.preferences_input.width() as u16 + 1,
                 layout[1].y + 1,
-            ),
-            _ => {}
+            )
         }
 
         f.render_stateful_widget(options, layout[0], &mut self.preferences.state);
