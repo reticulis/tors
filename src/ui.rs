@@ -212,7 +212,7 @@ impl App {
             .block(Block::default().borders(Borders::ALL).title(" Tasks "))
             .highlight_style(
                 Style::default()
-                    .bg(Color::LightBlue)
+                    .bg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD),
             );
 
@@ -246,17 +246,6 @@ impl App {
                     .border_type(BorderType::Rounded),
             );
 
-        match self.mode {
-            WindowMode::Task(EditMode::Edit(EditState::Title)) => {
-                f.set_cursor(layout[0].x + task.title.width() as u16 + 1, layout[0].y + 1)
-            }
-            WindowMode::Task(EditMode::Edit(EditState::Task)) => f.set_cursor(
-                layout[1].x + self.cursor_pos_x + 1,
-                layout[1].y + self.cursor_pos_y + 1,
-            ),
-            _ => {}
-        }
-
         let task_block = Paragraph::new(task.description.as_ref())
             .style(match self.mode {
                 WindowMode::Task(EditMode::Edit(EditState::Task)) => {
@@ -270,6 +259,17 @@ impl App {
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded),
             );
+
+        match self.mode {
+            WindowMode::Task(EditMode::Edit(EditState::Title)) => {
+                f.set_cursor(layout[0].x + task.title.width() as u16 + 1, layout[0].y + 1)
+            }
+            WindowMode::Task(EditMode::Edit(EditState::Task)) => f.set_cursor(
+                layout[1].x + self.cursor_pos_x + 1,
+                layout[1].y + self.cursor_pos_y + 1,
+            ),
+            _ => {}
+        }
 
         f.render_widget(title_block, layout[0]);
         f.render_widget(task_block, layout[1]);
