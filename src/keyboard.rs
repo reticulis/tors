@@ -205,14 +205,19 @@ impl App {
             match i {
                 0 => task.preferences.daily_repeat = !task.preferences.daily_repeat,
                 1 => {
-                    if self.mode == WindowMode::Preferences(false) {
-                        self.mode = WindowMode::Preferences(true);
-                    } else if let Ok(date) = chrono::NaiveDateTime::parse_from_str(
+                    if self.preferences_mode() {}
+                    else if let Ok(date) = chrono::NaiveDateTime::parse_from_str(
                         &self.preferences_input,
                         "%Y-%m-%d %H:%M:%S",
                     ) {
-                        task.preferences.expire.date = date;
+                        task.preferences.expire = date;
                         self.back_to_pref();
+                    }
+                }
+                2 => {
+                    if self.preferences_mode() {}
+                    else if let Ok(exp) = self.preferences_input.parse::<u32>() {
+                        task.preferences.exp = exp;
                     }
                 }
                 _ => {}
@@ -220,6 +225,15 @@ impl App {
         }
 
         Ok(())
+    }
+
+    fn preferences_mode(&mut self) -> bool {
+        if self.mode == WindowMode::Preferences(false) {
+            self.mode = WindowMode::Preferences(true);
+            return true
+        }
+
+        false
     }
 }
 

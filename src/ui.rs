@@ -90,24 +90,21 @@ pub struct Task {
     pub(crate) preferences: Preferences,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize)]
 pub struct Preferences {
     pub(crate) daily_repeat: bool,
-    pub(crate) expire: Date,
+    // pub(crate) expire: Date,
+    pub(crate) expire: NaiveDateTime,
+    pub(crate) exp: u32,
     // TODO
     // Another parameters
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Date {
-    pub(crate) date: NaiveDateTime,
-}
-
-impl Default for Date {
+impl Default for Preferences {
     fn default() -> Self {
         let now = Local::now().naive_local();
 
-        let date = match now.with_day(now.day() + 1) {
+        let expire = match now.with_day(now.day() + 1) {
             Some(date) => date,
             None => match now.with_month(now.month() + 1) {
                 Some(date) => date.with_day(1).unwrap(),
@@ -121,7 +118,11 @@ impl Default for Date {
             },
         };
 
-        Self { date }
+        Self {
+            daily_repeat: false,
+            expire,
+            exp: 25
+        }
     }
 }
 
@@ -149,7 +150,7 @@ impl App {
                     bincode::serde::decode_from_slice::<Task, _>(&task, self.database.config)
                         .ok()?;
 
-                if task.preferences.expire.date <= Local::now().naive_local() {
+                if task.preferences.expire <= Local::now().naive_local() {
                     return None;
                 }
 
@@ -293,9 +294,9 @@ impl App {
                 task
                     .preferences
                     .expire
-                    .date
                     .format("%Y-%m-%d %H:%M:%S")
             ),
+            format!("Experience: {}", task.preferences.exp)
         ];
 
         let options: Vec<ListItem> = self
@@ -307,7 +308,7 @@ impl App {
 
         let options = List::new(options).highlight_style(
             Style::default()
-                .bg(Color::LightBlue)
+                .bg(Color::DarkGray)
                 .add_modifier(Modifier::BOLD),
         );
 
