@@ -1,11 +1,12 @@
 # Tors
-## Simple Todo app written in Rust (for learning purposes)
+## Simple Todo app written in Rust with Gamification
 
-Libs used in the project:
-* clap
-* json-rust
-* dirs
-* colored
+## Todo
+- [x] Functionality todo list
+- [x] TUI
+- [ ] GUI (gtk4 + libadwaita)
+- [ ] Gamification (soon)
+- [ ] Optional encryption
 
 ### Build and install:
 ```shell
@@ -15,7 +16,22 @@ cargo build --release
 cargo install --path .
 ```
 
-### Usage
-```shell
-tors help # for info usage
-```
+# Usage
+- change field - key up/key down
+
+### Task list
+- new task - n
+- delete task - d
+- edit task - enter
+- close app - esc
+
+### Edit mode
+- edit title - t
+- edit description - e
+- edit preferences - p
+- save task - s
+- back to task list - esc
+
+### Preferences mode
+- change value - e
+- back to task edit - esc
