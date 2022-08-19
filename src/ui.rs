@@ -1,17 +1,19 @@
+use crate::config::Config;
 use crate::database::Database;
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDateTime};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::env;
 use std::rc::Rc;
 use tui::backend::Backend;
-use tui::layout::{Constraint, Layout};
+use tui::layout::{Alignment, Constraint, Layout};
 use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
-use rayon::prelude::*;
 
 #[derive(Default)]
 pub(crate) struct StatefulList<T> {
@@ -53,6 +55,7 @@ impl<T> StatefulList<T> {
 pub struct App {
     pub(crate) database: Database,
     pub(crate) mode: WindowMode,
+    pub(crate) config: Config,
     pub(crate) tasks: StatefulList<(String, Rc<RefCell<Task>>)>,
     pub(crate) preferences: StatefulList<String>,
     pub(crate) preferences_input: String,
@@ -67,6 +70,7 @@ pub enum WindowMode {
     List,
     Task(EditMode),
     Preferences(bool),
+    Stats,
 }
 
 #[derive(PartialEq, Eq)]
@@ -93,7 +97,6 @@ pub struct Task {
 #[derive(Serialize, Deserialize)]
 pub struct Preferences {
     pub(crate) daily_repeat: bool,
-    // pub(crate) expire: Date,
     pub(crate) expire: NaiveDateTime,
     pub(crate) exp: u32,
     // TODO
@@ -121,7 +124,7 @@ impl Default for Preferences {
         Self {
             daily_repeat: false,
             expire,
-            exp: 25
+            exp: 25,
         }
     }
 }
@@ -162,9 +165,7 @@ impl App {
             let time1 = time1.borrow();
             let time2 = time2.borrow();
 
-            time1
-                .creation_date
-                .cmp(&time2.creation_date)
+            time1.creation_date.cmp(&time2.creation_date)
         });
 
         self.tasks.items = tasks;
@@ -183,6 +184,7 @@ impl App {
             WindowMode::List => self.tasks_window(f),
             WindowMode::Task(_) => self.view_window(f),
             WindowMode::Preferences(_) => self.preferences_window(f),
+            WindowMode::Stats => self.statistics_window(f),
         }
     }
 
@@ -291,12 +293,9 @@ impl App {
             format!("Repeat: {}", task.preferences.daily_repeat),
             format!(
                 "Expire: {}",
-                task
-                    .preferences
-                    .expire
-                    .format("%Y-%m-%d %H:%M:%S")
+                task.preferences.expire.format("%Y-%m-%d %H:%M:%S")
             ),
-            format!("Experience: {}", task.preferences.exp)
+            format!("Experience: {}", task.preferences.exp),
         ];
 
         let options: Vec<ListItem> = self
@@ -328,5 +327,31 @@ impl App {
 
         f.render_stateful_widget(options, layout[0], &mut self.preferences.state);
         f.render_widget(input, layout[1]);
+    }
+
+    fn statistics_window<B: Backend>(&mut self, f: &mut Frame<B>) {
+        let layout = Layout::default()
+            .margin(2)
+            .constraints([Constraint::Percentage(100)])
+            .split(f.size());
+
+        let username = env::var("USER").unwrap_or_default();
+
+        let stats = format!(
+            "Level: TODO\n\
+            Exp: {}\n\
+            Exp to next level: TODO",
+            self.config.values.exp,
+        );
+
+        let stats = Paragraph::new(stats).block(
+            Block::default()
+                .title(format!(" {}'s stats", &username))
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded),
+        );
+
+        f.render_widget(stats, layout[0])
     }
 }

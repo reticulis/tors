@@ -1,10 +1,10 @@
-use crate::ui::{EditMode, EditState,Task, WindowMode};
+use crate::ui::{EditMode, EditState, Task, WindowMode};
 use crate::App;
+use anyhow::Result;
 use crossterm::event;
 use crossterm::event::{Event, KeyCode};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use anyhow::Result;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug)]
@@ -26,6 +26,8 @@ impl App {
                     KeyCode::Char(' ') => self.mark_task()?,
                     KeyCode::Char('n') => self.new_task()?,
                     KeyCode::Char('d') => self.delete_task()?,
+                    KeyCode::Char('s') => self.mode = WindowMode::Stats,
+                    // KeyCode::Char('a') => self.config.add_exp(30)?,
                     KeyCode::Down => self.tasks.next(),
                     KeyCode::Up => self.tasks.previous(),
                     KeyCode::Enter => self.edit_task()?,
@@ -58,7 +60,7 @@ impl App {
                         }
                         _ => {}
                     }
-                },
+                }
                 WindowMode::Task(EditMode::Edit(EditState::Task)) => match key.code {
                     KeyCode::Esc => self.mode = WindowMode::Task(EditMode::View),
                     KeyCode::Char(n) => self.description_input(n),
@@ -80,6 +82,10 @@ impl App {
                         self.preferences_input.pop();
                     }
                     KeyCode::Enter => self.preferences_edit()?,
+                    _ => {}
+                },
+                WindowMode::Stats => match key.code {
+                    KeyCode::Esc => self.back_to_list(),
                     _ => {}
                 },
             }
@@ -202,11 +208,19 @@ impl App {
         let task = &mut *task.borrow_mut();
 
         if let Some(i) = self.preferences.state.selected() {
+            if i == 0 {
+                task.preferences.daily_repeat = !task.preferences.daily_repeat;
+
+                return Ok(())
+            } else if self.mode == WindowMode::Preferences(false) {
+                self.mode = WindowMode::Preferences(true);
+
+                return Ok(());
+            }
+
             match i {
-                0 => task.preferences.daily_repeat = !task.preferences.daily_repeat,
                 1 => {
-                    if self.preferences_mode() {}
-                    else if let Ok(date) = chrono::NaiveDateTime::parse_from_str(
+                    if let Ok(date) = chrono::NaiveDateTime::parse_from_str(
                         &self.preferences_input,
                         "%Y-%m-%d %H:%M:%S",
                     ) {
@@ -215,9 +229,9 @@ impl App {
                     }
                 }
                 2 => {
-                    if self.preferences_mode() {}
-                    else if let Ok(exp) = self.preferences_input.parse::<u32>() {
+                    if let Ok(exp) = self.preferences_input.parse::<u32>() {
                         task.preferences.exp = exp;
+                        self.back_to_pref();
                     }
                 }
                 _ => {}
@@ -225,15 +239,6 @@ impl App {
         }
 
         Ok(())
-    }
-
-    fn preferences_mode(&mut self) -> bool {
-        if self.mode == WindowMode::Preferences(false) {
-            self.mode = WindowMode::Preferences(true);
-            return true
-        }
-
-        false
     }
 }
 

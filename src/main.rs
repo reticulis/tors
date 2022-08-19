@@ -1,3 +1,4 @@
+mod config;
 mod database;
 mod keyboard;
 mod ui;
@@ -23,10 +24,7 @@ fn main() -> Result<()> {
     let res = app.run(&mut terminal);
 
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
 
     if let Err(err) = res {
