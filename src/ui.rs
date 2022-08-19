@@ -1,9 +1,7 @@
-use crate::config::Config;
 use crate::database::Database;
 use anyhow::Result;
-use chrono::{Datelike, Local, NaiveDateTime};
+use chrono::Local;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::env;
 use std::rc::Rc;
@@ -14,48 +12,11 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph};
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
+use crate::task::Task;
 
-#[derive(Default)]
-pub(crate) struct StatefulList<T> {
-    pub(crate) state: ListState,
-    pub(crate) items: Vec<T>,
-}
-
-impl<T> StatefulList<T> {
-    pub(crate) fn next(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.items.len().saturating_sub(1) {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
-    }
-
-    pub(crate) fn previous(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.items.len().saturating_sub(1)
-                } else {
-                    i.saturating_sub(1)
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
-    }
-}
-
-#[derive(Default)]
 pub struct App {
     pub(crate) database: Database,
     pub(crate) mode: WindowMode,
-    pub(crate) config: Config,
     pub(crate) tasks: StatefulList<(String, Rc<RefCell<Task>>)>,
     pub(crate) preferences: StatefulList<String>,
     pub(crate) preferences_input: String,
@@ -64,72 +25,22 @@ pub struct App {
     pub(crate) width: u16,
 }
 
-#[derive(Default, PartialEq, Eq)]
-pub enum WindowMode {
-    #[default]
-    List,
-    Task(EditMode),
-    Preferences(bool),
-    Stats,
-}
-
-#[derive(PartialEq, Eq)]
-pub enum EditMode {
-    View,
-    Edit(EditState),
-}
-
-#[derive(PartialEq, Eq)]
-pub enum EditState {
-    Title,
-    Task,
-}
-
-#[derive(Serialize, Deserialize, Default)]
-pub struct Task {
-    pub(crate) title: String,
-    pub(crate) description: String,
-    pub(crate) done: bool,
-    pub(crate) creation_date: NaiveDateTime,
-    pub(crate) preferences: Preferences,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Preferences {
-    pub(crate) daily_repeat: bool,
-    pub(crate) expire: NaiveDateTime,
-    pub(crate) exp: u32,
-    // TODO
-    // Another parameters
-}
-
-impl Default for Preferences {
-    fn default() -> Self {
-        let now = Local::now().naive_local();
-
-        let expire = match now.with_day(now.day() + 1) {
-            Some(date) => date,
-            None => match now.with_month(now.month() + 1) {
-                Some(date) => date.with_day(1).unwrap(),
-                None => now
-                    .with_year(now.year() + 1)
-                    .unwrap()
-                    .with_month(1)
-                    .unwrap()
-                    .with_day(1)
-                    .unwrap(),
-            },
-        };
-
-        Self {
-            daily_repeat: false,
-            expire,
-            exp: 25,
-        }
-    }
-}
-
 impl App {
+    pub fn new() -> Result<Self> {
+        let database = Database::new()?;
+
+        Ok(Self {
+            database,
+            mode: WindowMode::default(),
+            tasks: StatefulList::default(),
+            preferences: StatefulList::default(),
+            preferences_input: String::new(),
+            cursor_pos_x: 0,
+            cursor_pos_y: 0,
+            width: 0,
+        })
+    }
+
     pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         self.update_tasks()?;
 
@@ -341,7 +252,7 @@ impl App {
             "Level: TODO\n\
             Exp: {}\n\
             Exp to next level: TODO",
-            self.config.values.exp,
+            self.database.get_exp().unwrap(),
         );
 
         let stats = Paragraph::new(stats).block(
@@ -354,4 +265,61 @@ impl App {
 
         f.render_widget(stats, layout[0])
     }
+}
+
+#[derive(Default)]
+pub(crate) struct StatefulList<T> {
+    pub(crate) state: ListState,
+    pub(crate) items: Vec<T>,
+}
+
+impl<T> StatefulList<T> {
+    pub(crate) fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i >= self.items.len().saturating_sub(1) {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    pub(crate) fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.items.len().saturating_sub(1)
+                } else {
+                    i.saturating_sub(1)
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+}
+
+#[derive(Default, PartialEq, Eq)]
+pub enum WindowMode {
+    #[default]
+    List,
+    Task(EditMode),
+    Preferences(bool),
+    Stats,
+}
+
+#[derive(PartialEq, Eq)]
+pub enum EditMode {
+    View,
+    Edit(EditState),
+}
+
+#[derive(PartialEq, Eq)]
+pub enum EditState {
+    Title,
+    Task,
 }

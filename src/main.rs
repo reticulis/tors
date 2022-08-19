@@ -1,7 +1,7 @@
-mod config;
 mod database;
 mod keyboard;
 mod ui;
+mod task;
 
 use crate::ui::App;
 use anyhow::Result;
@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::default();
+    let mut app = App::new()?;
     let res = app.run(&mut terminal);
 
     disable_raw_mode()?;

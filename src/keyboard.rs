@@ -1,4 +1,4 @@
-use crate::ui::{EditMode, EditState, Task, WindowMode};
+use crate::ui::{EditMode, EditState, WindowMode};
 use crate::App;
 use anyhow::Result;
 use crossterm::event;
@@ -6,6 +6,7 @@ use crossterm::event::{Event, KeyCode};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use unicode_width::UnicodeWidthStr;
+use crate::task::Task;
 
 #[derive(Debug)]
 pub struct ExitApp;
@@ -84,10 +85,9 @@ impl App {
                     KeyCode::Enter => self.preferences_edit()?,
                     _ => {}
                 },
-                WindowMode::Stats => match key.code {
-                    KeyCode::Esc => self.back_to_list(),
-                    _ => {}
-                },
+                WindowMode::Stats => if key.code == KeyCode::Esc {
+                    self.back_to_list();
+                }
             }
         }
         Ok(())
@@ -96,8 +96,12 @@ impl App {
     fn mark_task(&mut self) -> Result<()> {
         if let Some((id, task)) = self.task() {
             let task = &mut *task.borrow_mut();
-
             task.done = !task.done;
+
+            if !task.exp_added {
+                task.exp_added = true;
+                self.database.add_exp(task.preferences.exp)?;
+            }
 
             self.database.insert(id, task)?;
             self.update_tasks()?;
@@ -211,7 +215,7 @@ impl App {
             if i == 0 {
                 task.preferences.daily_repeat = !task.preferences.daily_repeat;
 
-                return Ok(())
+                return Ok(());
             } else if self.mode == WindowMode::Preferences(false) {
                 self.mode = WindowMode::Preferences(true);
 
