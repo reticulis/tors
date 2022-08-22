@@ -13,6 +13,28 @@ use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragr
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
 use crate::task::Task;
+use num_integer::Roots;
+
+#[derive(Default, PartialEq, Eq)]
+pub enum WindowMode {
+    #[default]
+    List,
+    Task(EditMode),
+    Preferences(bool),
+    Stats,
+}
+
+#[derive(PartialEq, Eq)]
+pub enum EditMode {
+    View,
+    Edit(EditState),
+}
+
+#[derive(PartialEq, Eq)]
+pub enum EditState {
+    Title,
+    Task,
+}
 
 pub struct App {
     pub(crate) database: Database,
@@ -248,11 +270,17 @@ impl App {
 
         let username = env::var("USER").unwrap_or_default();
 
+        let exp = self.database.get_exp().unwrap();
+        let lvl = (exp/10).sqrt()-1;
+        let next_lvl_exp = 10*(lvl+2).pow(2);
+
         let stats = format!(
-            "Level: TODO\n\
+            "Level: {}\n\
             Exp: {}\n\
-            Exp to next level: TODO",
-            self.database.get_exp().unwrap(),
+            Exp to next level: {}",
+            lvl,
+            exp,
+            next_lvl_exp - exp,
         );
 
         let stats = Paragraph::new(stats).block(
@@ -301,25 +329,4 @@ impl<T> StatefulList<T> {
         };
         self.state.select(Some(i));
     }
-}
-
-#[derive(Default, PartialEq, Eq)]
-pub enum WindowMode {
-    #[default]
-    List,
-    Task(EditMode),
-    Preferences(bool),
-    Stats,
-}
-
-#[derive(PartialEq, Eq)]
-pub enum EditMode {
-    View,
-    Edit(EditState),
-}
-
-#[derive(PartialEq, Eq)]
-pub enum EditState {
-    Title,
-    Task,
 }
