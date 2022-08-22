@@ -271,7 +271,7 @@ impl App {
         let username = env::var("USER").unwrap_or_default();
 
         let exp = self.database.get_exp().unwrap();
-        let lvl = (exp/10).sqrt()-1;
+        let lvl = (exp/10).sqrt().saturating_sub(1);
         let next_lvl_exp = 10*(lvl+2).pow(2);
 
         let stats = format!(
