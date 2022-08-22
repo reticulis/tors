@@ -144,6 +144,10 @@ impl App {
             })
             .collect();
 
+        if !tasks.is_empty() && self.tasks.state.selected().is_none() {
+            self.tasks.state.select(Some(0));
+        }
+
         let tasks = List::new(tasks)
             .block(Block::default().borders(Borders::ALL).title(" Tasks "))
             .highlight_style(
