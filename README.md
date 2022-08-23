@@ -2,7 +2,7 @@
 ## Simple Todo app written in Rust with Gamification
 
 ## Todo
-- [x] Functionality todo list
+- [x] Functional todo list
 - [x] TUI
 - [ ] GUI (gtk4 + libadwaita)
 - [ ] Gamification (soon)
