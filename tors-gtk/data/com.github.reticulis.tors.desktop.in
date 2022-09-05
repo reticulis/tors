@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=tors-gtk
+Exec=tors-gtk
+Icon=com.github.reticulis.tors
+Terminal=false
+Type=Application
+Categories=GTK;
+StartupNotify=true

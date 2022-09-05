@@ -1,0 +1,17 @@
+[package]
+name = "tors-gtk"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gettext-rs = { version = "0.7", features = ["gettext-system"] }
+gtk = { version = "0.4.8", package = "gtk4" }
+ashpd = "0.3.2"
+anyhow = "1.0.62"
+tors-database = { path = "../database" }
+lazy_static = "1.4.0"
+
+[dependencies.adw]
+package = "libadwaita"
+version = "0.2.0-alpha.2"
+features = ["v1_2"]

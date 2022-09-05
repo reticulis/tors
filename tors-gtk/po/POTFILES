@@ -1,0 +1,4 @@
+data/com.github.reticulis.tors.desktop.in
+data/com.github.reticulis.tors.appdata.xml.in
+data/com.github.reticulis.tors.gschema.xml
+src/window.ui
