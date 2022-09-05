@@ -1,20 +1,16 @@
 [package]
-name = "tors"
-version = "0.0.3-alpha"
+name = "tors-database"
+version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tui = "0.19.0"
-crossterm = "0.25.0"
-anyhow = "1.0.62"
-unicode-width = "0.1.9"
+anyhow = "1.0.63"
 sled = "0.34.7"
-serde = { version = "1.0.144", features = ["derive"] }
 bincode = { version = "2.0.0-rc.1", features = ["serde"] }
+serde = { version = "1.0.144", features = ["derive"] }
+phf = { version = "0.11.1", features = ["macros"] }
 nanoid = "0.4.0"
-chrono = {version = "0.4.22", features = ["serde"] }
-rayon = "1.5.3"
 dirs = "4.0.0"
 num-integer = "0.1.45"
