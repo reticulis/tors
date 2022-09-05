@@ -11,7 +11,6 @@ use sled::{Db, Iter};
 pub struct Database {
     pub db: Db,
     pub config: Configuration,
-    pub account: Account,
 }
 
 impl Database {
@@ -24,14 +23,8 @@ impl Database {
 
         let config = bincode::config::standard();
 
-        let account = match db.get("account")? {
-            Some(v) => bincode::serde::decode_from_slice(&v, config)?.0,
-            None => Account::default(),
-        };
-
         Ok(Self {
             db,
-            account,
             config,
         })
     }
@@ -65,13 +58,21 @@ impl Database {
         self.db.iter()
     }
 
-    pub fn add_exp(&mut self, exp: u32) -> Result<()> {
-        self.account.exp += exp;
-        self.account.lvl = (self.account.exp/10).sqrt().saturating_sub(1);
+    pub fn account(&self) -> Result<Account> {
+        let data = self.db.get("account")?.with_context(|| "Failed get account field")?;
+
+        Ok(bincode::serde::decode_from_slice(&data, self.config)?.0)
+    }
+
+    pub fn add_exp(&self, exp: u32) -> Result<()> {
+        let mut account = self.account()?;
+
+        account.exp += exp;
+        account.lvl = (account.exp/10).sqrt().saturating_sub(1);
 
         self.db.insert(
             "account",
-            bincode::serde::encode_to_vec(&self.account, self.config)?,
+            bincode::serde::encode_to_vec(account, self.config)?,
         )?;
 
         Ok(())

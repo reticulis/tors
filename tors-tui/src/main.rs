@@ -1,4 +1,3 @@
-mod database;
 mod keyboard;
 mod ui;
 mod task;

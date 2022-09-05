@@ -1,4 +1,3 @@
-use crate::database::Database;
 use anyhow::Result;
 use chrono::Local;
 use rayon::prelude::*;
@@ -13,7 +12,7 @@ use tui::widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragr
 use tui::{Frame, Terminal};
 use unicode_width::UnicodeWidthStr;
 use crate::task::Task;
-use num_integer::Roots;
+use tors_database::Database;
 
 #[derive(Default, PartialEq, Eq)]
 pub enum WindowMode {
@@ -274,17 +273,16 @@ impl App {
 
         let username = env::var("USER").unwrap_or_default();
 
-        let exp = self.database.get_exp().unwrap();
-        let lvl = (exp/10).sqrt().saturating_sub(1);
-        let next_lvl_exp = 10*(lvl+2).pow(2);
+        let account = self.database.account().unwrap_or_default();
+        let next_lvl_exp = 10*(account.lvl+2).pow(2);
 
         let stats = format!(
             "Level: {}\n\
             Exp: {}\n\
             Exp to next level: {}",
-            lvl,
-            exp,
-            next_lvl_exp - exp,
+            account.lvl,
+            account.exp,
+            next_lvl_exp - account.exp,
         );
 
         let stats = Paragraph::new(stats).block(
