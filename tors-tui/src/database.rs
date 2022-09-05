@@ -25,6 +25,7 @@ impl Database {
             config: bincode::config::standard(),
         })
     }
+
     pub(crate) fn add<T: Serialize>(&self, value: &T) -> Result<()> {
         let nanoid = nanoid!();
 

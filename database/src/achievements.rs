@@ -6,6 +6,9 @@ pub enum Achievements {
     FirstTask,
     MissionComplete,
 }
+
+// TODO
+
 // pub static ACHIEVEMENTS_LVL: phf::Map<&'static str, Achievements> = phf_map! {
 //     "5" => MissionComplete,
 // };
