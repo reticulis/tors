@@ -10,7 +10,7 @@ anyhow = "1.0.64"
 sled = "0.34.7"
 bincode = { version = "2.0.0-rc.1", features = ["serde"] }
 serde = { version = "1.0.144", features = ["derive"] }
-phf = { version = "0.11.1", features = ["macros"] }
+phf = { version = "0.11.2", features = ["macros"] }
 nanoid = "0.4.0"
 dirs = "4.0.0"
 num-integer = "0.1.45"
