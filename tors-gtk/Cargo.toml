@@ -13,5 +13,5 @@ lazy_static = "1.4.0"
 
 [dependencies.adw]
 package = "libadwaita"
-version = "0.2.0-alpha.2"
+version = "0.6.0"
 features = ["v1_2"]
