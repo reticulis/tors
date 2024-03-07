@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
-gtk = { version = "0.4.8", package = "gtk4" }
+gtk = { version = "0.8.1", package = "gtk4" }
 ashpd = "0.3.2"
 anyhow = "1.0.64"
 tors-database = { path = "../database" }
